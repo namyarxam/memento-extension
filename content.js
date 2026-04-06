@@ -1,23 +1,55 @@
 (function () {
   if (document.getElementById('cb-btn')) return;
 
-  let lastX = 0, lastY = 0;
   let mode = 'idle';
-  let lockedElement = null;
+  let hoveredElement = null;
+  let selectedElements = [];
 
-  // Track mouse — freeze position when hovering the button
-  document.addEventListener('mousemove', e => {
-    if (e.target.id !== 'cb-btn') {
-      lastX = e.clientX;
-      lastY = e.clientY;
+  // ── Styles ───────────────────────────────────────────────────────────────
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    #cb-cursor {
+      position: fixed;
+      pointer-events: none;
+      z-index: 2147483647;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      filter: drop-shadow(0 0 5px #2563eb) drop-shadow(0 0 10px rgba(37,99,235,0.6));
     }
-  });
+    .cb-selecting, .cb-selecting * { cursor: none !important; }
+    [data-cb-hover] {
+      outline: 2px solid rgba(37, 99, 235, 0.45) !important;
+      outline-offset: 3px;
+      border-radius: 4px;
+      background: rgba(37, 99, 235, 0.05) !important;
+    }
+    [data-cb-selected] {
+      outline: 2px solid #2563eb !important;
+      outline-offset: 3px;
+      border-radius: 4px;
+      background: rgba(37, 99, 235, 0.12) !important;
+    }
+  `;
+  document.head.appendChild(styleEl);
+
+  // ── Custom glowing cursor ─────────────────────────────────────────────────
+  const glow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  glow.id = 'cb-cursor';
+  glow.setAttribute('width', '24');
+  glow.setAttribute('height', '24');
+  glow.setAttribute('viewBox', '0 0 24 24');
+  glow.innerHTML = `<path d="M4 2 L4 18 L8 14 L11.5 21 L13.5 20 L10 13 L16 13 Z" fill="white" stroke="white" stroke-width="0.5"/>`;
+  document.body.appendChild(glow);
+
+  document.addEventListener('mousemove', e => {
+    glow.style.left = e.clientX + 'px';
+    glow.style.top = e.clientY + 'px';
+    if (mode === 'selecting') updateHover(e.clientX, e.clientY, e.target);
+  }, { passive: true });
 
   // ── Floating Button ──────────────────────────────────────────────────────
   const btn = document.createElement('button');
   btn.id = 'cb-btn';
-  btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="9" height="9" rx="1"/><rect x="13" y="3" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>`;
-  btn.title = 'Capture Brick';
   Object.assign(btn.style, {
     position: 'fixed', bottom: '88px', right: '24px',
     width: '48px', height: '48px', borderRadius: '50%',
@@ -26,6 +58,8 @@
     boxShadow: '0 4px 16px rgba(0,0,0,0.4)', transition: 'all 0.18s ease',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     outline: 'none', padding: '0',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontSize: '15px', fontWeight: '600',
   });
   document.body.appendChild(btn);
 
@@ -53,32 +87,171 @@
     toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, duration);
   }
 
-  // ── Button States ────────────────────────────────────────────────────────
+  // ── Button rendering ─────────────────────────────────────────────────────
+  const ICON_GRID = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="9" height="9" rx="1"/><rect x="13" y="3" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>`;
+  const ICON_CLOCK = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+
   function setIdle() {
-    btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="9" height="9" rx="1"/><rect x="13" y="3" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>`;
+    btn.innerHTML = ICON_GRID;
     btn.title = 'Capture Brick';
-    btn.style.background = '#18181b'; btn.style.border = '1px solid #3f3f46';
+    btn.style.background = '#18181b';
+    btn.style.border = '1px solid #3f3f46';
     btn.style.pointerEvents = 'auto';
-    mode = 'idle'; lockedElement = null;
   }
 
-  function setReady() {
-    btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
-    btn.title = 'Save Brick';
-    btn.style.background = '#2563eb'; btn.style.border = '1px solid #3b82f6';
-    mode = 'selecting';
+  function setSelecting() {
+    const count = selectedElements.length;
+    btn.innerHTML = count > 0 ? `${count}` : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>`;
+    btn.title = count > 0 ? `Capture ${count} block${count > 1 ? 's' : ''}` : 'Click text blocks to select';
+    btn.style.background = '#2563eb';
+    btn.style.border = '1px solid #3b82f6';
+    btn.style.pointerEvents = 'auto';
   }
 
   function setSaving() {
-    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-    btn.style.background = '#71717a'; btn.style.border = '1px solid #52525b';
+    btn.innerHTML = ICON_CLOCK;
+    btn.style.background = '#71717a';
+    btn.style.border = '1px solid #52525b';
     btn.style.pointerEvents = 'none';
   }
 
-  // ── Find Text Element ────────────────────────────────────────────────────
+  setIdle();
+
+  // ── Mode management ───────────────────────────────────────────────────────
+  function enterSelecting() {
+    mode = 'selecting';
+    document.body.classList.add('cb-selecting');
+    glow.style.opacity = '1';
+    setSelecting();
+    showToast('Click text blocks to select. Click button to capture.', 4000);
+  }
+
+  function exitSelecting() {
+    mode = 'idle';
+    document.body.classList.remove('cb-selecting');
+    glow.style.opacity = '0';
+    clearHover();
+    clearAllSelected();
+    setIdle();
+    toast.style.opacity = '0';
+  }
+
+  // ── Hover ─────────────────────────────────────────────────────────────────
+  function updateHover(x, y, target) {
+    if (target.id === 'cb-btn') { clearHover(); return; }
+    const el = findBestElement(x, y);
+    if (el === hoveredElement) return;
+    clearHover();
+    if (el && !el.dataset.cbSelected) {
+      hoveredElement = el;
+      el.dataset.cbHover = 'true';
+    }
+  }
+
+  function clearHover() {
+    if (hoveredElement) {
+      delete hoveredElement.dataset.cbHover;
+      hoveredElement = null;
+    }
+  }
+
+  // ── Selection ─────────────────────────────────────────────────────────────
+  function toggleSelect(el) {
+    if (el.dataset.cbSelected) {
+      delete el.dataset.cbSelected;
+      selectedElements = selectedElements.filter(e => e !== el);
+    } else {
+      el.dataset.cbSelected = 'true';
+      selectedElements.push(el);
+    }
+    setSelecting();
+  }
+
+  function clearAllSelected() {
+    selectedElements.forEach(el => delete el.dataset.cbSelected);
+    selectedElements = [];
+  }
+
+  // Capture clicks on the page while in selecting mode
+  document.addEventListener('click', e => {
+    if (mode !== 'selecting') return;
+    if (e.target.id === 'cb-btn') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = findBestElement(e.clientX, e.clientY);
+    if (!el) return;
+    clearHover();
+    toggleSelect(el);
+  }, true);
+
+  // ── Button click ──────────────────────────────────────────────────────────
+  btn.addEventListener('click', async () => {
+    if (mode === 'idle') {
+      enterSelecting();
+      return;
+    }
+
+    if (mode === 'selecting') {
+      if (selectedElements.length === 0) {
+        exitSelecting();
+        return;
+      }
+
+      const text = selectedElements
+        .map(el => el.innerText?.trim())
+        .filter(Boolean)
+        .join('\n\n');
+
+      const url = window.location.href;
+
+      exitSelecting();
+      setSaving();
+      showToast('Saving…');
+
+      const saveTimeout = setTimeout(() => {
+        setIdle();
+        showToast('Timed out. Try again.');
+      }, 12000);
+
+      const doSave = () => {
+        chrome.runtime.sendMessage({ action: 'saveBrick', text, url }, response => {
+          clearTimeout(saveTimeout);
+          setIdle();
+          if (chrome.runtime.lastError) {
+            showToast('Extension error. Reload the page and try again.');
+            return;
+          }
+          if (response?.success) {
+            showToast(`Saved ${selectedElements.length > 1 ? selectedElements.length + ' blocks' : '1 block'}.`);
+          } else if (response?.reason === 'not_authenticated') {
+            showToast('Sign in via the extension popup first.');
+          } else {
+            showToast('Save failed: ' + (response?.reason || 'unknown'));
+          }
+        });
+      };
+
+      try {
+        chrome.runtime.sendMessage({ action: 'ping' }, () => {
+          if (chrome.runtime.lastError) { /* worker was asleep, now awake */ }
+          setTimeout(doSave, 100);
+        });
+      } catch (e) {
+        clearTimeout(saveTimeout);
+        setIdle();
+        showToast('Could not reach extension. Reload the page.');
+      }
+    }
+  });
+
+  // Escape cancels
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && mode === 'selecting') exitSelecting();
+  });
+
+  // ── Element finding ───────────────────────────────────────────────────────
   function findBestElement(x, y) {
-    // Sample a small grid around the cursor to find best candidate
-    const points = [[x,y],[x-20,y],[x+20,y],[x,y-20],[x,y+20],[x-40,y],[x,y-40]];
+    const points = [[x,y],[x-20,y],[x+20,y],[x,y-20],[x,y+20]];
     for (const [px, py] of points) {
       const el = document.elementFromPoint(px, py);
       if (!el || el.id === 'cb-btn') continue;
@@ -94,9 +267,7 @@
       const text = cur.innerText?.trim() || '';
       if (text.length > 15) {
         const tag = cur.tagName;
-        // Block elements always win
         if (['P','LI','BLOCKQUOTE','H1','H2','H3','H4','PRE','TD'].includes(tag)) return cur;
-        // Div/span: only if it looks like a prose-width container, not a layout wrapper
         if (['DIV','SPAN'].includes(tag)) {
           const rect = cur.getBoundingClientRect();
           if (rect.width > 80 && rect.width < window.innerWidth * 0.9 && text.length < 3000) return cur;
@@ -106,138 +277,5 @@
     }
     return null;
   }
-
-  function getParagraphNumber(el) {
-    const all = Array.from(document.querySelectorAll('p, li, h1, h2, h3, h4, blockquote'));
-    const idx = all.findIndex(n => n === el || n.contains(el) || el.contains(n));
-    return idx >= 0 ? idx + 1 : '?';
-  }
-
-  function getPageTitle() {
-    return document.title.replace(/ [-|] Claude.*$/i, '').trim() || 'Claude Conversation';
-  }
-
-  // ── Highlight ────────────────────────────────────────────────────────────
-  function highlightElement(el) {
-    clearHighlight();
-    lockedElement = el;
-    el.dataset.cbHighlighted = 'true';
-    el.style.outline = '2px solid #2563eb';
-    el.style.outlineOffset = '3px';
-    el.style.borderRadius = '4px';
-    el.style.background = 'rgba(37, 99, 235, 0.07)';
-    try {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } catch (e) {}
-  }
-
-  function clearHighlight() {
-    const prev = document.querySelector('[data-cb-highlighted]');
-    if (prev) {
-      prev.style.outline = '';
-      prev.style.outlineOffset = '';
-      prev.style.borderRadius = '';
-      prev.style.background = '';
-      delete prev.dataset.cbHighlighted;
-    }
-    lockedElement = null;
-  }
-
-  // ── Main Click ───────────────────────────────────────────────────────────
-  btn.addEventListener('click', async () => {
-
-    if (mode === 'idle') {
-      // If user already manually selected text — use it immediately
-      const existingSel = window.getSelection()?.toString().trim();
-      if (existingSel && existingSel.length > 5) {
-        setReady();
-        showToast('Selection locked. Tap ✓ to save.', 3000);
-        return;
-      }
-
-      // Otherwise find element near cursor
-      const el = findBestElement(lastX, lastY);
-      if (el) {
-        highlightElement(el);
-        setReady();
-        showToast('Drag to adjust. Tap ✓ to save.', 3500);
-      } else {
-        showToast('Hover over the text you want, then tap.');
-      }
-
-    } else if (mode === 'selecting') {
-      const sel = window.getSelection();
-      let text = sel?.toString().trim();
-      if (!text && lockedElement) text = lockedElement.innerText?.trim() || '';
-
-      if (!text) {
-        showToast('Nothing captured. Try again.');
-        clearHighlight();
-        setIdle();
-        return;
-      }
-
-      const pageTitle = getPageTitle();
-      const url = window.location.href;
-      const pNum = lockedElement ? getParagraphNumber(lockedElement) : '?';
-      const source = `${pageTitle} p${pNum}`;
-
-      clearHighlight();
-      window.getSelection()?.removeAllRanges();
-      setSaving();
-      showToast('Saving brick…');
-
-      const saveTimeout = setTimeout(() => {
-        setIdle();
-        showToast('❌ Timed out. Try again.');
-      }, 12000);
-
-      // Ping first to wake the service worker, then save
-      const doSave = () => {
-        chrome.runtime.sendMessage(
-          { action: 'saveBrick', text, source, url },
-          (response) => {
-            clearTimeout(saveTimeout);
-            setIdle();
-            if (chrome.runtime.lastError) {
-              console.error('CB lastError:', chrome.runtime.lastError);
-              showToast('❌ Extension error. Reload this page and try again.');
-              return;
-            }
-            if (response?.success) {
-              showToast(`🧱 Saved — ${source}`);
-            } else {
-              showToast('❌ Save failed: ' + (response?.reason || 'unknown'));
-            }
-          }
-        );
-      };
-
-      try {
-        chrome.runtime.sendMessage({ action: 'ping' }, () => {
-          if (chrome.runtime.lastError) { /* worker was asleep, now awake */ }
-          setTimeout(doSave, 100);
-        });
-      } catch(e) {
-        clearTimeout(saveTimeout);
-        setIdle();
-        showToast('❌ Could not reach extension. Reload this page.');
-      }
-    }
-  });
-
-  // Escape cancels
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && mode === 'selecting') {
-      clearHighlight();
-      window.getSelection()?.removeAllRanges();
-      setIdle();
-      toast.style.opacity = '0';
-    }
-  });
 
 })();

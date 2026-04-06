@@ -34,73 +34,79 @@
       margin-top: 1px;
     }
 
-    label {
-      display: block;
-      font-size: 11px;
-      font-weight: 500;
-      color: #a1a1aa;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      margin-bottom: 5px;
-      margin-top: 14px;
-    }
+    /* Signed out */
+    #view-signed-out { display: flex; flex-direction: column; gap: 12px; }
 
-    input {
-      width: 100%;
-      padding: 9px 11px;
-      border-radius: 7px;
-      border: 1px solid #27272a;
-      background: #18181b;
-      color: #fafafa;
-      font-size: 12px;
-      font-family: monospace;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-
-    input:focus {
-      border-color: #2563eb;
-    }
-
-    input::placeholder { color: #52525b; }
-
-    .note {
-      font-size: 11px;
-      color: #52525b;
-      margin-top: 4px;
-      line-height: 1.4;
-    }
-
-    button {
-      margin-top: 18px;
+    .btn-google {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
       width: 100%;
       padding: 10px;
-      background: #2563eb;
-      color: white;
-      border: none;
+      background: #18181b;
+      color: #fafafa;
+      border: 1px solid #27272a;
       border-radius: 7px;
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
       transition: background 0.15s;
     }
+    .btn-google:hover { background: #27272a; }
+    .btn-google:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    button:hover { background: #1d4ed8; }
-
-    .status {
+    .hint {
+      font-size: 11px;
+      color: #52525b;
       text-align: center;
-      font-size: 12px;
-      margin-top: 10px;
-      height: 16px;
-      color: #22c55e;
-      opacity: 0;
-      transition: opacity 0.2s;
+      line-height: 1.5;
     }
+
+    /* Signed in */
+    #view-signed-in { display: none; flex-direction: column; gap: 14px; }
+
+    .user-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #27272a;
+      object-fit: cover;
+    }
+
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-email { font-size: 11px; color: #71717a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .btn-signout {
+      width: 100%;
+      padding: 9px;
+      background: transparent;
+      color: #71717a;
+      border: 1px solid #27272a;
+      border-radius: 7px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-signout:hover { background: #18181b; color: #fafafa; }
 
     .divider {
       border: none;
       border-top: 1px solid #27272a;
-      margin: 18px 0 4px;
+    }
+
+    .status {
+      font-size: 11px;
+      color: #ef4444;
+      text-align: center;
+      min-height: 14px;
     }
   </style>
 </head>
@@ -108,22 +114,30 @@
   <div class="header">
     <div>
       <h1>🧱 Capture Brick</h1>
-      <div class="sub">Settings</div>
+      <div class="sub" id="header-sub">Sign in to start capturing</div>
     </div>
   </div>
 
-  <label>Notion Integration Secret</label>
-  <input type="password" id="notionKey" placeholder="secret_...">
-  <div class="note">From notion.so/profile/integrations</div>
+  <div id="view-signed-out">
+    <button class="btn-google" id="btn-signin">
+      <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Sign in with Google
+    </button>
+    <p class="hint">Your captures are saved to your account and accessible from any browser.</p>
+    <div class="status" id="error-msg"></div>
+  </div>
 
-  <hr class="divider">
-
-  <label>Anthropic API Key</label>
-  <input type="password" id="claudeKey" placeholder="sk-ant-...">
-  <div class="note">Used for auto-tagging bricks. Optional but recommended.</div>
-
-  <button id="save">Save Settings</button>
-  <div class="status" id="status">✓ Settings saved</div>
+  <div id="view-signed-in">
+    <div class="user-row">
+      <img class="avatar" id="user-avatar" src="" alt="">
+      <div class="user-info">
+        <div class="user-name" id="user-name"></div>
+        <div class="user-email" id="user-email"></div>
+      </div>
+    </div>
+    <hr class="divider">
+    <button class="btn-signout" id="btn-signout">Sign out</button>
+  </div>
 
   <script src="popup.js"></script>
 </body>

@@ -1,4 +1,7 @@
-const DATABASE_ID = '338ec58fa370806eae65d96aaf557e7d';
+// TODO: Replace with your Supabase project values
+const SUPABASE_URL = "https://qzuqjnawcwvrhfafeypu.supabase.co";
+const SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6dXFqbmF3Y3d2cmhmYWZleXB1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MTI0MTIsImV4cCI6MjA5MTA4ODQxMn0.Kl8AoKNXW_ovcUOsS3441rYUKSc9dZHogYDrjTuOfKE";
 
 // Keep service worker alive
 const keepAlive = () => setInterval(chrome.runtime.getPlatformInfo, 20000);
@@ -6,98 +9,101 @@ chrome.runtime.onStartup.addListener(keepAlive);
 keepAlive();
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === 'saveBrick') {
+  if (msg.action === "saveBrick") {
     saveBrick(msg).then(sendResponse);
     return true;
   }
-  if (msg.action === 'ping') {
+  if (msg.action === "signIn") {
+    signIn().then(sendResponse);
+    return true;
+  }
+  if (msg.action === "signOut") {
+    signOut().then(sendResponse);
+    return true;
+  }
+  if (msg.action === "getSession") {
+    getSession().then(sendResponse);
+    return true;
+  }
+  if (msg.action === "ping") {
     sendResponse({ pong: true });
     return true;
   }
 });
 
-async function saveBrick({ text, source, url }) {
+async function getSession() {
+  const { session } = await chrome.storage.sync.get(["session"]);
+  return session || null;
+}
+
+async function signIn() {
   try {
-    const config = await chrome.storage.sync.get(['notionKey', 'claudeKey']);
-    const notionKey = config.notionKey;
-    const claudeKey = config.claudeKey;
+    const redirectUrl = chrome.identity.getRedirectURL();
+    const authUrl =
+      `${SUPABASE_URL}/auth/v1/authorize?` +
+      `provider=google&` +
+      `redirect_to=${encodeURIComponent(redirectUrl)}`;
 
-    if (!notionKey) {
-      console.error('Capture Brick: No Notion key set.');
-      return { success: false, reason: 'no_key' };
-    }
-
-    let tags = [];
-    if (claudeKey && text) {
-      try {
-        const tagRes = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': claudeKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 80,
-            messages: [{
-              role: 'user',
-              content: `Return ONLY a JSON array of 2-3 lowercase tags for this insight. No preamble, no markdown, just the array. Example: ["strategy","product"]\n\nText: ${text.slice(0, 600)}`
-            }]
-          })
-        });
-        const tagData = await tagRes.json();
-        const raw = tagData.content?.[0]?.text?.trim() || '[]';
-        tags = JSON.parse(raw.replace(/```json|```/g, '').trim());
-        if (!Array.isArray(tags)) tags = [];
-      } catch (e) {
-        tags = [];
-      }
-    }
-
-    const safeText = (text || '').slice(0, 2000);
-    const safeSource = source || 'Unknown source';
-    const safeUrl = url || null;
-
-    const notionRes = await fetch('https://api.notion.com/v1/pages', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${notionKey}`,
-        'Content-Type': 'application/json',
-        'Notion-Version': '2022-06-28',
-      },
-      body: JSON.stringify({
-        parent: { database_id: DATABASE_ID },
-        properties: {
-          Brick: {
-            title: [{ text: { content: safeSource } }]
-          },
-          URL: {
-            url: safeUrl
-          },
-          Tags: {
-            multi_select: tags.slice(0, 5).map(t => ({ name: String(t).slice(0, 50) }))
-          },
-          Date: {
-            date: { start: new Date().toISOString().split('T')[0] }
-          },
-          'Raw Text': {
-            rich_text: [{ text: { content: safeText } }]
-          }
-        }
-      })
+    const responseUrl = await chrome.identity.launchWebAuthFlow({
+      url: authUrl,
+      interactive: true,
     });
 
-    if (notionRes.ok) {
-      return { success: true };
-    } else {
-      const err = await notionRes.json();
-      console.error('Capture Brick: Notion error', JSON.stringify(err));
-      return { success: false, reason: JSON.stringify(err) };
-    }
+    // Extract tokens from the hash fragment Supabase returns
+    const url = new URL(responseUrl);
+    const params = new URLSearchParams(url.hash.replace("#", ""));
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
 
+    if (!accessToken)
+      return { success: false, reason: "No access token returned" };
+
+    // Fetch user info
+    const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+    });
+    const user = await userRes.json();
+
+    const session = { accessToken, refreshToken, user };
+    await chrome.storage.sync.set({ session });
+    return { success: true, session };
   } catch (e) {
-    console.error('Capture Brick: Unexpected error', e);
+    return { success: false, reason: e.message };
+  }
+}
+
+async function signOut() {
+  await chrome.storage.sync.remove(["session"]);
+  return { success: true };
+}
+
+async function saveBrick({ text, url }) {
+  try {
+    const session = await getSession();
+    if (!session) return { success: false, reason: "not_authenticated" };
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/captures`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.accessToken}`,
+        apikey: SUPABASE_ANON_KEY,
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        text: text || "",
+        url: url || null,
+      }),
+    });
+
+    if (res.ok) return { success: true };
+
+    const err = await res.json();
+    return { success: false, reason: JSON.stringify(err) };
+  } catch (e) {
     return { success: false, reason: e.message };
   }
 }
