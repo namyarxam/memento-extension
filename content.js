@@ -3,8 +3,9 @@
 
   let mode = 'idle';
   let hoveredElement = null;
-  let selectedElements = [];
-  let dragState = null;
+  let moments = []; // each moment: { elements: Element[], overlay: HTMLElement }
+  const SEMANTIC_TAGS = new Set(['P','LI','H1','H2','H3','H4','H5','H6','PRE','TD','FIGURE','DETAILS','SUMMARY','CODE']);
+  const BLOCK_TAGS = 'p, li, h1, h2, h3, h4, h5, h6, pre, td, figure, details, summary, code';
 
   // ── Styles ───────────────────────────────────────────────────────────────
   const styleEl = document.createElement('style');
@@ -15,19 +16,7 @@
       border-radius: 4px;
       background: rgba(120, 113, 108, 0.04) !important;
     }
-    [data-cb-selected] {
-      outline: 2px solid #78716c !important;
-      outline-offset: 3px;
-      border-radius: 4px;
-      background: rgba(120, 113, 108, 0.08) !important;
-    }
-    [data-cb-pending] {
-      outline: 2px dashed rgba(120, 113, 108, 0.5) !important;
-      outline-offset: 3px;
-      border-radius: 4px;
-      background: rgba(120, 113, 108, 0.04) !important;
-    }
-    .cb-selecting, .cb-selecting * { cursor: crosshair !important; }
+    .cb-selecting, .cb-selecting * { cursor: crosshair !important; user-select: none !important; -webkit-user-select: none !important; }
     #cb-mode-ring {
       position: fixed;
       inset: 0;
@@ -61,20 +50,122 @@
   modeRing.id = 'cb-mode-ring';
   document.body.appendChild(modeRing);
 
+  // ── Drag overlay (hold+drag preview) ────────────────────────────────────
+  const dragOverlay = document.createElement('div');
+  dragOverlay.id = 'cb-drag-overlay';
+  Object.assign(dragOverlay.style, {
+    position: 'fixed', pointerEvents: 'none', zIndex: '2147483645',
+    border: '2px dashed rgba(120, 113, 108, 0.5)',
+    borderRadius: '4px',
+    background: 'rgba(120, 113, 108, 0.06)',
+    display: 'none',
+  });
+  document.body.appendChild(dragOverlay);
+
+  function updateDragOverlay(blocksInRange) {
+    if (blocksInRange.length === 0) { dragOverlay.style.display = 'none'; return; }
+    let top = Infinity, bottom = -Infinity, left = Infinity, right = -Infinity;
+    for (const el of blocksInRange) {
+      const r = el.getBoundingClientRect();
+      if (r.top < top) top = r.top;
+      if (r.bottom > bottom) bottom = r.bottom;
+      if (r.left < left) left = r.left;
+      if (r.right > right) right = r.right;
+    }
+    Object.assign(dragOverlay.style, {
+      display: 'block',
+      top: (top - 4) + 'px', left: (left - 4) + 'px',
+      width: (right - left + 8) + 'px', height: (bottom - top + 8) + 'px',
+    });
+  }
+
+  function hideDragOverlay() { dragOverlay.style.display = 'none'; }
+
+  // ── Drag state ─────────────────────────────────────────────────────────────
+  let dragStartX = 0, dragStartY = 0;
+  let isDragging = false;
+  let mouseIsDown = false;
+  const DRAG_THRESHOLD = 5;
+
+  function getBlocksInDragRange(startX, y1, y2) {
+    const top = Math.min(y1, y2);
+    const bottom = Math.max(y1, y2);
+    const all = Array.from(document.querySelectorAll(BLOCK_TAGS));
+    const results = [];
+    for (const el of all) {
+      const r = el.getBoundingClientRect();
+      if (r.height === 0 || r.width === 0) continue;
+      const text = (el.innerText?.trim() || '');
+      if (text.length < 3) continue;
+      // Block must overlap vertically with drag range
+      if (r.bottom < top || r.top > bottom) continue;
+      // Block must be horizontally near the drag start (same content column)
+      if (startX < r.left - 40 || startX > r.right + 40) continue;
+      // Skip sidebar/nav elements
+      if (el.closest('nav, aside, [role="navigation"], [role="complementary"]')) continue;
+      results.push(el);
+    }
+    return results;
+  }
+
+  document.addEventListener('mousedown', e => {
+    if (mode !== 'selecting') return;
+    if (e.target.closest('#cb-btn')) return;
+    if (e.button !== 0) return;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    mouseIsDown = true;
+    isDragging = false;
+  }, true);
+
   document.addEventListener('mousemove', e => {
     if (mode !== 'selecting') return;
-    if (dragState) {
-      const dx = e.clientX - dragState.startX;
-      const dy = e.clientY - dragState.startY;
-      if (!dragState.isDragging && (dx * dx + dy * dy) > 25) {
-        dragState.isDragging = true;
+
+    if (mouseIsDown) {
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      if (!isDragging && Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
+        isDragging = true;
         clearHover();
       }
-      if (dragState.isDragging) updateDragSelection(dragState.startY, e.clientY);
-    } else {
-      updateHover(e.clientX, e.clientY, e.target);
+      if (isDragging) {
+        const blocksInRange = getBlocksInDragRange(dragStartX, dragStartY, e.clientY);
+        updateDragOverlay(blocksInRange);
+        return;
+      }
     }
+
+    updateHover(e.clientX, e.clientY, e.target);
   }, { passive: true });
+
+  document.addEventListener('mouseup', e => {
+    if (mode !== 'selecting') return;
+    if (!mouseIsDown) return;
+    mouseIsDown = false;
+
+    if (isDragging) {
+      isDragging = false;
+      hideDragOverlay();
+      const blocksInRange = getBlocksInDragRange(dragStartX, dragStartY, e.clientY);
+      // Filter out elements already in a moment
+      const newBlocks = blocksInRange.filter(b => !b.dataset.cbMoment);
+      if (newBlocks.length > 0) addMoment(newBlocks);
+      return;
+    }
+
+    // Not a drag — treat as click toggle
+    if (e.target.closest('#cb-btn')) return;
+    const el = findBestElement(e.clientX, e.clientY);
+    if (!el) return;
+    clearHover();
+    // If already in a moment, remove that entire moment
+    const existing = el.dataset.cbMoment && moments.find(m => m.elements.includes(el));
+    if (existing) {
+      removeMoment(existing);
+    } else {
+      addMoment([el]);
+    }
+  }, true);
 
   // ── Floating Button (polaroid shape) ─────────────────────────────────────
   const btn = document.createElement('button');
@@ -176,7 +267,7 @@
   }
 
   function setSelecting() {
-    const count = selectedElements.length;
+    const count = moments.length;
     if (count > 0) {
       btnPhoto.innerHTML = `<span style="color:#e7e5e4;font-size:13px;font-weight:700">${count}</span>`;
       btnStrip.style.background = 'rgba(255,255,255,0.7)';
@@ -185,7 +276,7 @@
       btnStrip.style.background = 'rgba(255,255,255,0.85)';
     }
     btnPhoto.style.background = '';
-    btn.title = count > 0 ? `Save ${count} block${count > 1 ? 's' : ''}` : 'Click text to select';
+    btn.title = count > 0 ? `Save ${count} moment${count > 1 ? 's' : ''}` : 'Click text to select';
     btn.style.pointerEvents = 'auto';
     btn.style.transform = 'scale(1)';
   }
@@ -219,7 +310,7 @@
     document.body.classList.add('cb-selecting');
     modeRing.classList.add('cb-visible');
     setSelecting();
-    showToast('Click or drag to select text, then click to save.', 4000);
+    showToast('Click to select blocks. Hold + drag for a range.', 4000);
   }
 
   function exitSelecting() {
@@ -227,9 +318,10 @@
     document.body.classList.remove('cb-selecting');
     modeRing.classList.remove('cb-visible');
     clearHover();
-    clearPending();
-    clearAllSelected();
-    dragState = null;
+    hideDragOverlay();
+    clearAllMoments();
+    mouseIsDown = false;
+    isDragging = false;
     setIdle();
     toast.style.opacity = '0';
   }
@@ -240,7 +332,7 @@
     const el = findBestElement(x, y);
     if (el === hoveredElement) return;
     clearHover();
-    if (el && !el.dataset.cbSelected) {
+    if (el && !el.dataset.cbMoment) {
       hoveredElement = el;
       el.dataset.cbHover = 'true';
     }
@@ -253,91 +345,71 @@
     }
   }
 
-  // ── Selection ─────────────────────────────────────────────────────────────
-  function toggleSelect(el) {
-    if (el.dataset.cbSelected) {
-      delete el.dataset.cbSelected;
-      selectedElements = selectedElements.filter(e => e !== el);
-    } else {
-      el.dataset.cbSelected = 'true';
-      selectedElements.push(el);
+  // ── Moments (selection groups) ────────────────────────────────────────────
+  function createMomentOverlay() {
+    const div = document.createElement('div');
+    Object.assign(div.style, {
+      position: 'fixed', pointerEvents: 'none', zIndex: '2147483645',
+      outline: '2px solid #78716c',
+      outlineOffset: '3px',
+      borderRadius: '4px',
+      background: 'rgba(120, 113, 108, 0.05)',
+    });
+    document.body.appendChild(div);
+    return div;
+  }
+
+  function repositionMomentOverlay(moment) {
+    const { elements, overlay } = moment;
+    let top = Infinity, bottom = -Infinity, left = Infinity, right = -Infinity;
+    for (const el of elements) {
+      const r = el.getBoundingClientRect();
+      if (r.top < top) top = r.top;
+      if (r.bottom > bottom) bottom = r.bottom;
+      if (r.left < left) left = r.left;
+      if (r.right > right) right = r.right;
     }
-    setSelecting();
-  }
-
-  function clearAllSelected() {
-    selectedElements.forEach(el => delete el.dataset.cbSelected);
-    selectedElements = [];
-  }
-
-  // ── Drag-to-select ────────────────────────────────────────────────────────
-  const BLOCK_TAGS = 'p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, td, figure, details, summary';
-
-  function collectBlockElements() {
-    return Array.from(document.querySelectorAll(BLOCK_TAGS)).filter(el => {
-      if (el.closest('#cb-btn')) return false;
-      const text = el.innerText?.trim() || '';
-      return text.length > 2;
+    Object.assign(overlay.style, {
+      top: (top - 2) + 'px', left: (left - 2) + 'px',
+      width: (right - left + 4) + 'px', height: (bottom - top + 4) + 'px',
     });
   }
 
-  function clearPending() {
-    document.querySelectorAll('[data-cb-pending]').forEach(el => delete el.dataset.cbPending);
+  function addMoment(elements) {
+    const overlay = createMomentOverlay();
+    const moment = { elements, overlay };
+    elements.forEach(el => { el.dataset.cbMoment = 'true'; });
+    moments.push(moment);
+    repositionMomentOverlay(moment);
+    setSelecting();
   }
 
-  function updateDragSelection(startY, endY) {
-    clearPending();
-    const minY = Math.min(startY, endY);
-    const maxY = Math.max(startY, endY);
-    dragState.pendingEls = [];
-    for (const el of dragState.blocks) {
-      const rect = el.getBoundingClientRect();
-      const centerY = rect.top + rect.height / 2;
-      if (centerY >= minY && centerY <= maxY && !el.dataset.cbSelected) {
-        el.dataset.cbPending = 'true';
-        dragState.pendingEls.push(el);
-      }
+  function removeMoment(moment) {
+    moment.elements.forEach(el => delete el.dataset.cbMoment);
+    moment.overlay.remove();
+    moments = moments.filter(m => m !== moment);
+    setSelecting();
+  }
+
+  function clearAllMoments() {
+    for (const m of moments) {
+      m.elements.forEach(el => delete el.dataset.cbMoment);
+      m.overlay.remove();
     }
+    moments = [];
   }
 
-  document.addEventListener('mousedown', e => {
-    if (mode !== 'selecting') return;
-    if (e.target.closest('#cb-btn')) return;
-    if (e.button !== 0) return;
-    const el = findBestElement(e.clientX, e.clientY);
-    dragState = {
-      startX: e.clientX,
-      startY: e.clientY,
-      startEl: el,
-      isDragging: false,
-      blocks: collectBlockElements(),
-      pendingEls: [],
-    };
-  }, true);
+  // Reposition all moment overlays on ANY scroll (capture catches inner containers)
+  document.addEventListener('scroll', () => {
+    for (const m of moments) repositionMomentOverlay(m);
+  }, { passive: true, capture: true });
 
+  // Suppress native click in selecting mode to prevent links/buttons from firing
   document.addEventListener('click', e => {
     if (mode !== 'selecting') return;
     if (e.target.closest('#cb-btn')) return;
     e.preventDefault();
     e.stopPropagation();
-  }, true);
-
-  document.addEventListener('mouseup', e => {
-    if (mode !== 'selecting' || !dragState) return;
-    if (dragState.isDragging && dragState.pendingEls.length > 0) {
-      clearPending();
-      for (const el of dragState.pendingEls) {
-        if (!el.dataset.cbSelected) {
-          el.dataset.cbSelected = 'true';
-          selectedElements.push(el);
-        }
-      }
-      setSelecting();
-    } else if (dragState.startEl) {
-      clearHover();
-      toggleSelect(dragState.startEl);
-    }
-    dragState = null;
   }, true);
 
   // ── Role detection ────────────────────────────────────────────────────────
@@ -381,19 +453,21 @@
     }
 
     if (mode === 'selecting') {
-      if (selectedElements.length === 0) {
+      if (moments.length === 0) {
         exitSelecting();
         return;
       }
 
-      const blocks = selectedElements
+      // Flatten all moments' elements into blocks for saving
+      const allElements = moments.flatMap(m => m.elements);
+      const blocks = allElements
         .map(el => ({ text: el.innerText?.trim() || '', role: detectRole(el) }))
         .filter(b => b.text.length > 0);
 
       const text = blocks.map(b => b.text).join('\n\n');
       const source_text = text.slice(0, 80);
       const url = window.location.href;
-      const savedCount = selectedElements.length;
+      const savedCount = moments.length;
 
       exitSelecting();
       setSaving();
@@ -441,17 +515,22 @@
   });
 
   // ── Element finding ───────────────────────────────────────────────────────
-  const SEMANTIC_TAGS = new Set(['P','LI','BLOCKQUOTE','H1','H2','H3','H4','H5','H6','PRE','TD','FIGURE','DETAILS','SUMMARY','CODE']);
-
   function findBestElement(x, y) {
     const points = [[x,y],[x-15,y],[x+15,y],[x,y-10],[x,y+10]];
+    let best = null;
     for (const [px, py] of points) {
       const el = document.elementFromPoint(px, py);
       if (!el || el.closest('#cb-btn')) continue;
       const found = walkUpForText(el);
-      if (found) return found;
+      if (!found) continue;
+      // Prefer semantic tags over DIV/SPAN; among equals prefer first found
+      if (!best) { best = found; continue; }
+      const foundIsSemantic = SEMANTIC_TAGS.has(found.tagName);
+      const bestIsSemantic = SEMANTIC_TAGS.has(best.tagName);
+      if (foundIsSemantic && !bestIsSemantic) best = found;
+      else if (foundIsSemantic && bestIsSemantic && found.innerText.length < best.innerText.length) best = found;
     }
-    return null;
+    return best;
   }
 
   function walkUpForText(el) {
