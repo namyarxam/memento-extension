@@ -17,6 +17,7 @@
       background: rgba(120, 113, 108, 0.04) !important;
     }
     .cb-selecting, .cb-selecting * { cursor: crosshair !important; user-select: none !important; -webkit-user-select: none !important; }
+    #cb-btn, #cb-btn * { cursor: pointer !important; }
     #cb-mode-ring {
       position: fixed;
       inset: 0;
@@ -100,6 +101,7 @@
       if (r.bottom < top || r.top > bottom) continue;
       if (startX < r.left - 40 || startX > r.right + 40) continue;
       if (el.closest('nav, aside, [role="navigation"], [role="complementary"]')) continue;
+      if (!isInChatArea(el)) continue;
       candidates.push(el);
     }
     // Remove nested duplicates — if a parent and child both match, keep only the parent
@@ -172,7 +174,7 @@
   btn.id = 'cb-btn';
   btn.innerHTML = `<div id="cb-btn-photo"></div><div id="cb-btn-strip"></div>`;
   Object.assign(btn.style, {
-    position: 'fixed', bottom: '88px', right: '72px',
+    position: 'fixed', top: '50%', right: '72px', transform: 'translateY(-50%)',
     width: '32px', height: '40px', borderRadius: '6px 6px 3px 3px',
     background: '#44403c',
     border: '1.5px solid rgba(255,255,255,0.85)',
@@ -210,18 +212,18 @@
   document.body.appendChild(btn);
 
   btn.addEventListener('mouseenter', () => {
-    btn.style.transform = 'scale(1.06)';
+    btn.style.transform = 'translateY(-50%) scale(1.06)';
     btn.style.boxShadow = '0 8px 24px rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.15)';
   });
   btn.addEventListener('mouseleave', () => {
-    btn.style.transform = 'scale(1)';
+    btn.style.transform = 'translateY(-50%) scale(1)';
     btn.style.boxShadow = '0 4px 18px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.15)';
   });
 
   // ── Toast ────────────────────────────────────────────────────────────────
   const toast = document.createElement('div');
   Object.assign(toast.style, {
-    position: 'fixed', bottom: '148px', right: '72px',
+    position: 'fixed', top: 'calc(50% - 48px)', right: '36px',
     background: '#292524', color: '#e7e5e4', padding: '9px 14px',
     borderRadius: '8px', fontSize: '13px', lineHeight: '1.4',
     zIndex: '2147483647', opacity: '0', transition: 'opacity 0.25s ease',
@@ -263,7 +265,7 @@
     btnStrip.style.background = 'rgba(255,255,255,0.85)';
     btn.title = 'Memento — save a moment';
     btn.style.pointerEvents = 'auto';
-    btn.style.transform = 'scale(1)';
+    btn.style.transform = 'translateY(-50%) scale(1)';
   }
 
   function setSelecting() {
@@ -278,7 +280,7 @@
     btnPhoto.style.background = '';
     btn.title = count > 0 ? `Save ${count} moment${count > 1 ? 's' : ''}` : 'Click text to select';
     btn.style.pointerEvents = 'auto';
-    btn.style.transform = 'scale(1)';
+    btn.style.transform = 'translateY(-50%) scale(1)';
   }
 
   function setSaving() {
@@ -286,7 +288,7 @@
     btnPhoto.style.background = '';
     btnStrip.style.background = 'rgba(255,255,255,0.85)';
     btn.style.pointerEvents = 'none';
-    btn.style.transform = 'scale(1)';
+    btn.style.transform = 'translateY(-50%) scale(1)';
   }
 
   // ── Eject animation ───────────────────────────────────────────────────────
@@ -326,7 +328,19 @@
     toast.style.opacity = '0';
   }
 
-  // ── Hover ─────────────────────────────────────────────────────────────────
+  // ── Hover (fixed overlay — immune to platform CSS) ────────────────────────
+  const hoverOverlay = document.createElement('div');
+  hoverOverlay.id = 'cb-hover-overlay';
+  Object.assign(hoverOverlay.style, {
+    position: 'fixed', pointerEvents: 'none', zIndex: '2147483644',
+    outline: '2px solid rgba(120, 113, 108, 0.4)',
+    outlineOffset: '3px',
+    borderRadius: '4px',
+    background: 'rgba(120, 113, 108, 0.04)',
+    display: 'none',
+  });
+  document.body.appendChild(hoverOverlay);
+
   function updateHover(x, y, target) {
     if (target.closest('#cb-btn')) { clearHover(); return; }
     const el = findBestElement(x, y);
@@ -334,14 +348,21 @@
     clearHover();
     if (el && !el.dataset.cbMoment) {
       hoveredElement = el;
-      el.dataset.cbHover = 'true';
+      const rect = el.getBoundingClientRect();
+      Object.assign(hoverOverlay.style, {
+        display: 'block',
+        top: (rect.top - 2) + 'px',
+        left: (rect.left - 2) + 'px',
+        width: (rect.width + 4) + 'px',
+        height: (rect.height + 4) + 'px',
+      });
     }
   }
 
   function clearHover() {
     if (hoveredElement) {
-      delete hoveredElement.dataset.cbHover;
       hoveredElement = null;
+      hoverOverlay.style.display = 'none';
     }
   }
 
@@ -428,6 +449,14 @@
       if (el.closest('model-response')) return 'assistant';
     }
     return 'unknown';
+  }
+
+  // ── Chat area gating (only select inside AI conversation on known platforms) ─
+  function isInChatArea(el) {
+    const host = location.hostname;
+    const known = host.includes('chatgpt.com') || host.includes('claude.ai') || host.includes('gemini.google.com');
+    if (!known) return true;
+    return !!getMessageCeiling(el);
   }
 
   // ── Message boundary (prevents walking up past a message container) ────────
@@ -542,8 +571,10 @@
     for (const [px, py] of points) {
       const el = document.elementFromPoint(px, py);
       if (!el || el.closest('#cb-btn')) continue;
+      if (el.id === 'cb-hover-overlay') continue;
       const found = walkUpForText(el);
       if (!found) continue;
+      if (!isInChatArea(found)) continue;
       // Prefer semantic tags over DIV/SPAN; among equals prefer first found
       if (!best) { best = found; continue; }
       const foundIsSemantic = SEMANTIC_TAGS.has(found.tagName);
