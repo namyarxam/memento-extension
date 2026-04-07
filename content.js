@@ -91,21 +91,21 @@
     const top = Math.min(y1, y2);
     const bottom = Math.max(y1, y2);
     const all = Array.from(document.querySelectorAll(BLOCK_TAGS));
-    const results = [];
+    const candidates = [];
     for (const el of all) {
       const r = el.getBoundingClientRect();
       if (r.height === 0 || r.width === 0) continue;
       const text = (el.innerText?.trim() || '');
       if (text.length < 3) continue;
-      // Block must overlap vertically with drag range
       if (r.bottom < top || r.top > bottom) continue;
-      // Block must be horizontally near the drag start (same content column)
       if (startX < r.left - 40 || startX > r.right + 40) continue;
-      // Skip sidebar/nav elements
       if (el.closest('nav, aside, [role="navigation"], [role="complementary"]')) continue;
-      results.push(el);
+      candidates.push(el);
     }
-    return results;
+    // Remove nested duplicates — if a parent and child both match, keep only the parent
+    return candidates.filter(el =>
+      !candidates.some(other => other !== el && other.contains(el))
+    );
   }
 
   document.addEventListener('mousedown', e => {
@@ -445,6 +445,21 @@
     return null;
   }
 
+  // ── Text extraction (preserves list formatting) ────────────────────────────
+  function extractText(el) {
+    const raw = el.innerText?.trim() || '';
+    if (el.tagName === 'LI') {
+      const parent = el.parentElement;
+      if (parent && parent.tagName === 'OL') {
+        const items = Array.from(parent.children).filter(c => c.tagName === 'LI');
+        const idx = items.indexOf(el) + 1;
+        return `${idx}. ${raw}`;
+      }
+      return `• ${raw}`;
+    }
+    return raw;
+  }
+
   // ── Button click ──────────────────────────────────────────────────────────
   btn.addEventListener('click', async () => {
     if (mode === 'idle') {
@@ -458,10 +473,16 @@
         return;
       }
 
-      // Flatten all moments' elements into blocks for saving
-      const allElements = moments.flatMap(m => m.elements);
-      const blocks = allElements
-        .map(el => ({ text: el.innerText?.trim() || '', role: detectRole(el) }))
+      // Each moment becomes one block — drag selections merge into a single entry
+      const blocks = moments
+        .map(m => {
+          const text = m.elements
+            .map(el => extractText(el))
+            .filter(t => t.length > 0)
+            .join('\n');
+          const role = detectRole(m.elements[0]);
+          return { text, role };
+        })
         .filter(b => b.text.length > 0);
 
       const text = blocks.map(b => b.text).join('\n\n');
