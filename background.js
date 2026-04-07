@@ -3,6 +3,19 @@ const SUPABASE_URL = "https://qzuqjnawcwvrhfafeypu.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6dXFqbmF3Y3d2cmhmYWZleXB1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MTI0MTIsImV4cCI6MjA5MTA4ODQxMn0.Kl8AoKNXW_ovcUOsS3441rYUKSc9dZHogYDrjTuOfKE";
 
+// Re-inject content script on SPA navigation (e.g. claude.ai navigating to /chat/*)
+const CONTENT_PATTERNS = [
+  /^https:\/\/claude\.ai\/chat\//,
+  /^https:\/\/gemini\.google\.com\/app\//,
+  /^https:\/\/chatgpt\.com\/c\//,
+];
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  const url = changeInfo.url;
+  if (!url || !CONTENT_PATTERNS.some(p => p.test(url))) return;
+  chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] }).catch(() => {});
+});
+
 // Keep service worker alive
 const keepAlive = () => setInterval(chrome.runtime.getPlatformInfo, 20000);
 chrome.runtime.onStartup.addListener(keepAlive);
@@ -94,6 +107,7 @@ async function saveBrick({ text, url }) {
         Prefer: "return=minimal",
       },
       body: JSON.stringify({
+        user_id: session.user.id,
         text: text || "",
         url: url || null,
       }),

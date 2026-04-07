@@ -4,7 +4,7 @@
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqeWT+voJL2/krtBz7vTR8nwr5Z4vgvyVJrF4tzwe+6OKylxu8n8NNGWdODlkevzjxjOTzd5CpXQh8AkHWNIfLGcmqbZZv6XFRMkZ4K6bUzL8w1UYy8dr9E9jK02Wf2oW1zPlRJSy9v0h95FQsuQXOEvYM/Yk+gijltr0kp4qr0hvEr3nJD5wYAKPI3myzJaVb8ttvsfKS0hV7WNLovHGrN3+h+E3yKjbY02KRU2K6F5C2ud5ZmFETYejBHQly+bArjeCJxSxuuUccbPvjto4qGOj30+SZUGc5yPqVs9ja/BMN7mGsBjUHvRUIex/yD65bVUTsnwhXw1d+4y918s/kQIDAQAB",
   "version": "2.0",
   "description": "Capture insights from any AI conversation.",
-  "permissions": ["activeTab", "scripting", "storage", "identity"],
+  "permissions": ["activeTab", "scripting", "storage", "identity", "tabs"],
   "host_permissions": [
     "https://claude.ai/*",
     "https://gemini.google.com/*",

@@ -8,15 +8,6 @@
   // ── Styles ───────────────────────────────────────────────────────────────
   const styleEl = document.createElement('style');
   styleEl.textContent = `
-    #cb-cursor {
-      position: fixed;
-      pointer-events: none;
-      z-index: 2147483647;
-      opacity: 0;
-      transition: opacity 0.15s ease;
-      filter: drop-shadow(0 0 5px #2563eb) drop-shadow(0 0 10px rgba(37,99,235,0.6));
-    }
-    .cb-selecting, .cb-selecting * { cursor: none !important; }
     [data-cb-hover] {
       outline: 2px solid rgba(37, 99, 235, 0.45) !important;
       outline-offset: 3px;
@@ -29,21 +20,26 @@
       border-radius: 4px;
       background: rgba(37, 99, 235, 0.12) !important;
     }
+    .cb-selecting, .cb-selecting * { cursor: pointer !important; }
+    #cb-mode-ring {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2147483644;
+      box-shadow: inset 0 0 60px rgba(37, 99, 235, 0.18), inset 0 0 120px rgba(37, 99, 235, 0.08);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    #cb-mode-ring.cb-visible { opacity: 1; }
   `;
   document.head.appendChild(styleEl);
 
-  // ── Custom glowing cursor ─────────────────────────────────────────────────
-  const glow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  glow.id = 'cb-cursor';
-  glow.setAttribute('width', '24');
-  glow.setAttribute('height', '24');
-  glow.setAttribute('viewBox', '0 0 24 24');
-  glow.innerHTML = `<path d="M4 2 L4 18 L8 14 L11.5 21 L13.5 20 L10 13 L16 13 Z" fill="white" stroke="white" stroke-width="0.5"/>`;
-  document.body.appendChild(glow);
+  // ── Mode ring overlay ─────────────────────────────────────────────────────
+  const modeRing = document.createElement('div');
+  modeRing.id = 'cb-mode-ring';
+  document.body.appendChild(modeRing);
 
   document.addEventListener('mousemove', e => {
-    glow.style.left = e.clientX + 'px';
-    glow.style.top = e.clientY + 'px';
     if (mode === 'selecting') updateHover(e.clientX, e.clientY, e.target);
   }, { passive: true });
 
@@ -121,7 +117,7 @@
   function enterSelecting() {
     mode = 'selecting';
     document.body.classList.add('cb-selecting');
-    glow.style.opacity = '1';
+    modeRing.classList.add('cb-visible');
     setSelecting();
     showToast('Click text blocks to select. Click button to capture.', 4000);
   }
@@ -129,7 +125,7 @@
   function exitSelecting() {
     mode = 'idle';
     document.body.classList.remove('cb-selecting');
-    glow.style.opacity = '0';
+    modeRing.classList.remove('cb-visible');
     clearHover();
     clearAllSelected();
     setIdle();
@@ -138,7 +134,7 @@
 
   // ── Hover ─────────────────────────────────────────────────────────────────
   function updateHover(x, y, target) {
-    if (target.id === 'cb-btn') { clearHover(); return; }
+    if (target.closest('#cb-btn')) { clearHover(); return; }
     const el = findBestElement(x, y);
     if (el === hoveredElement) return;
     clearHover();
@@ -175,7 +171,7 @@
   // Capture clicks on the page while in selecting mode
   document.addEventListener('click', e => {
     if (mode !== 'selecting') return;
-    if (e.target.id === 'cb-btn') return;
+    if (e.target.closest('#cb-btn')) return;
     e.preventDefault();
     e.stopPropagation();
     const el = findBestElement(e.clientX, e.clientY);
@@ -203,6 +199,7 @@
         .join('\n\n');
 
       const url = window.location.href;
+      const savedCount = selectedElements.length;
 
       exitSelecting();
       setSaving();
@@ -222,7 +219,7 @@
             return;
           }
           if (response?.success) {
-            showToast(`Saved ${selectedElements.length > 1 ? selectedElements.length + ' blocks' : '1 block'}.`);
+            showToast(`Saved ${savedCount > 1 ? savedCount + ' blocks' : '1 block'}.`);
           } else if (response?.reason === 'not_authenticated') {
             showToast('Sign in via the extension popup first.');
           } else {
@@ -254,7 +251,7 @@
     const points = [[x,y],[x-20,y],[x+20,y],[x,y-20],[x,y+20]];
     for (const [px, py] of points) {
       const el = document.elementFromPoint(px, py);
-      if (!el || el.id === 'cb-btn') continue;
+      if (!el || el.closest('#cb-btn')) continue;
       const found = walkUpForText(el);
       if (found) return found;
     }
