@@ -1,8 +1,8 @@
-# Capture Brick — Project Context
+# Memento — Project Context
 
 ## What this is
 
-A Chrome extension for capturing text snippets ("bricks") from AI tools. The user hovers over a text element, a capture button appears, they click it, and the text is saved to their Supabase account — accessible in a companion frontend dashboard.
+A Chrome extension (rebranded from "Capture Brick" to "Memento") for capturing text snippets ("moments") from AI tools. The user clicks a floating button, enters selection mode, clicks or drags to select text blocks, and saves them to Supabase — accessible in a companion frontend dashboard.
 
 The product is AI-tool-agnostic: it works across Claude, ChatGPT, Gemini, Perplexity, and any other AI interface. That cross-platform reach is the core value prop — not any single model or platform.
 
@@ -30,7 +30,9 @@ captures (
   id          uuid primary key,
   user_id     uuid references auth.users(id),
   text        text,
-  url         text,       -- link back to the source AI conversation
+  blocks      jsonb,       -- array of { text, role } for structured capture
+  source_text text,        -- first 80 chars for jump-to-source matching
+  url         text,        -- link back to the source AI conversation
   created_at  timestamptz
 )
 ```
@@ -42,10 +44,30 @@ Row-level security enabled — users can only read/write their own rows.
 | File | Purpose |
 |------|---------|
 | `manifest.json` | Extension config — permissions, content script, service worker |
-| `background.js` | Service worker — auth (signIn/signOut/getSession) and saveBrick |
-| `content.js` | Injected into every page — hover detection, capture button, highlight UI |
+| `background.js` | Service worker — auth (signIn/signOut/getSession/refreshSession) and saveBrick |
+| `content.js` | Injected into every page — selection UI, drag-to-select, role detection, capture button |
 | `popup.html` | Extension popup markup — signed-out and signed-in states |
 | `popup.js` | Popup logic — renders auth state, triggers sign in/out, shows recent captures |
+
+## Role detection (how we identify user vs. assistant messages)
+
+This is core to the product — we detect which AI tool the user is on and use platform-specific DOM selectors to tag each captured block as `user` or `assistant`.
+
+| Platform | User selector | Assistant selector | Notes |
+|----------|--------------|-------------------|-------|
+| ChatGPT | `[data-message-author-role]` attr | Same attr, value != 'user' | Gold standard — explicit semantic data attribute |
+| Claude | `[data-testid="user-message"]` | `[data-is-streaming]` primary, `.font-claude-response` fallback | User side is solid (test attr). Assistant uses data attr + class fallback |
+| Gemini | `<user-query>` custom element | `<model-response>` custom element | Angular component tags — architecturally baked in, very stable |
+
+A `getMessageCeiling()` function uses these same selectors to prevent the element walker from escaping past a message boundary — this is what keeps selection granularity consistent.
+
+## Selection UX
+
+- **Floating button:** Dark charcoal card (32x40px) with green bookmark-M icon, white border, white strip at bottom. Positioned bottom-right with 72px margin from edge.
+- **Click to select:** Single click toggles individual text blocks
+- **Drag to select:** Hold and drag vertically to sweep-select a range of blocks. Dashed outline preview shows what will be selected. 5px movement threshold prevents accidental drags.
+- **Eject animation:** On save, a small card flies upward from the button
+- **Message ceiling:** Element finder stops at message container boundaries so it never walks up into page-level containers
 
 ## Production checklist
 Before going public or publishing to the Chrome Web Store:
@@ -53,11 +75,12 @@ Before going public or publishing to the Chrome Web Store:
 
 ## TODOs before the extension works end-to-end
 
-1. Fill in `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `background.js`
-2. Update `manifest.json` host_permissions with the real Supabase project URL
-3. Lock extension ID with a `key` field in `manifest.json` (required for stable OAuth redirect URI)
-4. Set up Google OAuth provider in Supabase dashboard
-5. Configure Google Cloud Console OAuth credentials with the correct redirect URIs
+1. ~~Fill in `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `background.js`~~ Done
+2. ~~Update `manifest.json` host_permissions with the real Supabase project URL~~ Done
+3. ~~Lock extension ID with a `key` field in `manifest.json`~~ Done
+4. ~~Set up Google OAuth provider in Supabase dashboard~~ Done
+5. ~~Configure Google Cloud Console OAuth credentials~~ Done
+6. Add `blocks` (jsonb) and `source_text` (text) columns to the `captures` table in Supabase
 
 ## Supabase setup (step by step)
 

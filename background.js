@@ -93,25 +93,59 @@ async function signOut() {
   return { success: true };
 }
 
-async function saveBrick({ text, url }) {
+async function refreshSession(session) {
   try {
-    const session = await getSession();
-    if (!session) return { success: false, reason: "not_authenticated" };
-
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/captures`, {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${session.accessToken}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ refresh_token: session.refreshToken }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const newSession = {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      user: data.user,
+    };
+    await chrome.storage.sync.set({ session: newSession });
+    return newSession;
+  } catch {
+    return null;
+  }
+}
+
+async function saveBrick({ text, url, blocks, source_text }) {
+  try {
+    let session = await getSession();
+    if (!session) return { success: false, reason: "not_authenticated" };
+
+    const attempt = async (s) => fetch(`${SUPABASE_URL}/rest/v1/captures`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${s.accessToken}`,
         apikey: SUPABASE_ANON_KEY,
         Prefer: "return=minimal",
       },
       body: JSON.stringify({
-        user_id: session.user.id,
+        user_id: s.user.id,
         text: text || "",
         url: url || null,
+        blocks: blocks || null,
+        source_text: source_text || null,
       }),
     });
+
+    let res = await attempt(session);
+
+    if (res.status === 401) {
+      const refreshed = await refreshSession(session);
+      if (!refreshed) return { success: false, reason: "not_authenticated" };
+      res = await attempt(refreshed);
+    }
 
     if (res.ok) return { success: true };
 
