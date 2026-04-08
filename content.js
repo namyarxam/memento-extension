@@ -169,22 +169,41 @@
     }
   }, true);
 
-  // ── Floating Button (polaroid shape) ─────────────────────────────────────
+  // ── Floating Button (logo) ───────────────────────────────────────────────
+  const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 167.42 196.24" width="28" height="32">
+    <polygon fill="#0f7588" points="122.16 19.29 122.16 19.32 122.18 19.3 122.16 19.29"/>
+    <polygon fill="#108292" points="167.04 146.75 167.04 146.85 84.11 97.97 83.66 98.23 83.69 98.25 83.69 196.24 167.31 146.91 167.04 146.75"/>
+    <polygon fill="#105465" points="83.66 98.23 83.42 98.09 41.17 122.63 .01 146.91 83.64 196.24 83.64 98.25 83.66 98.23"/>
+    <polygon fill="#0f7588" points="83.69 97.5 83.69 97.43 83.64 97.46 83.64 97.47 83.69 97.5"/>
+    <polygon fill="#0f7588" points="83.99 97.76 83.87 97.83 84.11 97.97 84.23 97.9 83.99 97.76"/>
+    <polygon fill="#0f7588" points=".21 49.16 0 146.91 84.13 97.73 .21 49.16"/>
+    <polygon fill="#14a8b4" points="167.21 49.16 167.42 146.91 83.29 97.73 167.21 49.16"/>
+    <polygon fill="#0f7588" points="83.87 97.83 83.54 97.64 83.09 97.9 83.42 98.09 83.87 97.83"/>
+    <polygon fill="#0f7588" points="83.66 97.56 83.64 97.55 83.64 97.47 83.63 97.46 83.43 97.58 83.54 97.64 83.66 97.56"/>
+    <polygon fill="#0f7588" points="83.66 97.56 83.99 97.76 84.06 97.72 83.69 97.5 83.69 97.55 83.66 97.56"/>
+    <polygon fill="#fff" points="83.71 128.53 108.87 113.8 108.87 143.27 134.54 128.62 134.54 67.86 83.71 97.67 83.69 97.67 32.86 67.86 32.86 128.62 58.54 143.27 58.54 113.8 83.69 128.53 83.71 128.53"/>
+    <polygon fill="#54b7c5" points="167.31 49.33 83.69 0 83.69 97.87 167.31 49.33"/>
+    <polygon fill="#199eae" points="83.63 97.91 83.64 97.9 83.64 0 .01 49.33 83.63 97.91"/>
+    <polygon fill="#fff" points="83.9 69.15 83.9 69.15 83.9 31.85 52.05 50.65 83.9 69.15"/>
+    <polygon fill="#fff" opacity=".5" points="84.51 69.15 84.5 69.15 84.5 31.85 116.36 50.65 84.51 69.15"/>
+  </svg>`;
+
   const btn = document.createElement('button');
   btn.id = 'cb-btn';
   btn.innerHTML = `<div id="cb-btn-photo"></div><div id="cb-btn-strip"></div>`;
   Object.assign(btn.style, {
     position: 'fixed', top: '50%', right: '72px', transform: 'translateY(-50%)',
-    width: '32px', height: '40px', borderRadius: '6px 6px 3px 3px',
-    background: '#44403c',
-    border: '1.5px solid rgba(255,255,255,0.85)',
+    width: '36px', height: '42px', borderRadius: '6px',
+    background: 'transparent',
+    border: 'none',
     cursor: 'pointer', zIndex: '2147483647',
-    boxShadow: '0 4px 18px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.15)',
-    transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+    boxShadow: 'none',
+    transition: 'transform 0.18s ease, filter 0.18s ease',
     display: 'flex', flexDirection: 'column', alignItems: 'stretch',
     outline: 'none', padding: '0',
-    overflow: 'hidden',
+    overflow: 'visible',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.3))',
   });
 
   const btnPhoto = btn.querySelector('#cb-btn-photo');
@@ -202,8 +221,8 @@
 
   const btnStrip = btn.querySelector('#cb-btn-strip');
   Object.assign(btnStrip.style, {
-    height: '9px',
-    background: 'rgba(255,255,255,0.85)',
+    height: '0px',
+    background: 'transparent',
     borderTop: 'none',
     flexShrink: '0',
     transition: 'background 0.18s ease',
@@ -212,12 +231,12 @@
   document.body.appendChild(btn);
 
   btn.addEventListener('mouseenter', () => {
-    btn.style.transform = 'translateY(-50%) scale(1.06)';
-    btn.style.boxShadow = '0 8px 24px rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.15)';
+    btn.style.transform = 'translateY(-50%) scale(1.1)';
+    btn.style.filter = 'drop-shadow(0 5px 14px rgba(0,0,0,0.4))';
   });
   btn.addEventListener('mouseleave', () => {
     btn.style.transform = 'translateY(-50%) scale(1)';
-    btn.style.boxShadow = '0 4px 18px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.15)';
+    btn.style.filter = 'drop-shadow(0 3px 10px rgba(0,0,0,0.3))';
   });
 
   // ── Toast ────────────────────────────────────────────────────────────────
@@ -260,9 +279,9 @@
 
   // ── Button rendering ─────────────────────────────────────────────────────
   function setIdle() {
-    btnPhoto.innerHTML = ICON_BOOKMARK;
+    btnPhoto.innerHTML = LOGO_SVG;
     btnPhoto.style.background = '';
-    btnStrip.style.background = 'rgba(255,255,255,0.85)';
+    btnStrip.style.background = 'transparent';
     btn.title = 'Memento — save a moment';
     btn.style.pointerEvents = 'auto';
     btn.style.transform = 'translateY(-50%) scale(1)';
@@ -271,13 +290,16 @@
   function setSelecting() {
     const count = moments.length;
     if (count > 0) {
-      btnPhoto.innerHTML = `<span style="color:#e7e5e4;font-size:13px;font-weight:700">${count}</span>`;
-      btnStrip.style.background = 'rgba(255,255,255,0.7)';
+      btnPhoto.innerHTML = `<span style="color:#fff;font-size:13px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,0.4)">${count}</span>`;
+      btnPhoto.style.background = 'rgba(20,168,180,0.85)';
+      btnPhoto.style.borderRadius = '6px';
+      btnStrip.style.background = 'transparent';
     } else {
       btnPhoto.innerHTML = ICON_CROSSHAIR;
-      btnStrip.style.background = 'rgba(255,255,255,0.85)';
+      btnPhoto.style.background = '';
+      btnPhoto.style.borderRadius = '';
+      btnStrip.style.background = 'transparent';
     }
-    btnPhoto.style.background = '';
     btn.title = count > 0 ? `Save ${count} moment${count > 1 ? 's' : ''}` : 'Click text to select';
     btn.style.pointerEvents = 'auto';
     btn.style.transform = 'translateY(-50%) scale(1)';
@@ -286,7 +308,8 @@
   function setSaving() {
     btnPhoto.innerHTML = ICON_DOTS;
     btnPhoto.style.background = '';
-    btnStrip.style.background = 'rgba(255,255,255,0.85)';
+    btnPhoto.style.borderRadius = '';
+    btnStrip.style.background = 'transparent';
     btn.style.pointerEvents = 'none';
     btn.style.transform = 'translateY(-50%) scale(1)';
   }

@@ -7,9 +7,9 @@
 
     body {
       width: 300px;
-      padding: 20px;
-      background: #1e1b4b;
-      color: #e0e7ff;
+      padding: 24px;
+      background: #f5f9fa;
+      color: #3d5a63;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 13px;
     }
@@ -17,25 +17,31 @@
     .header {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 20px;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+
+    .header-logo {
+      width: 32px;
+      height: 37px;
+      flex-shrink: 0;
     }
 
     .header h1 {
-      font-size: 15px;
-      font-weight: 600;
-      color: #fff;
-      letter-spacing: -0.01em;
+      font-size: 16px;
+      font-weight: 700;
+      color: #105465;
+      letter-spacing: -0.02em;
     }
 
     .header .sub {
       font-size: 11px;
-      color: #a5b4fc;
-      margin-top: 1px;
+      color: #5f7a82;
+      margin-top: 2px;
     }
 
     /* Signed out */
-    #view-signed-out { display: flex; flex-direction: column; gap: 12px; }
+    #view-signed-out { display: flex; flex-direction: column; gap: 14px; }
 
     .btn-google {
       display: flex;
@@ -43,22 +49,23 @@
       justify-content: center;
       gap: 10px;
       width: 100%;
-      padding: 10px;
-      background: #312e81;
-      color: #e0e7ff;
-      border: 1px solid #4338ca;
-      border-radius: 7px;
+      padding: 11px 14px;
+      background: #fff;
+      color: #3d5a63;
+      border: 1px solid #c1d3d7;
+      border-radius: 8px;
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: all 0.15s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
-    .btn-google:hover { background: #3730a3; }
+    .btn-google:hover { border-color: #14a8b4; box-shadow: 0 1px 4px rgba(20,168,180,0.15); }
     .btn-google:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .hint {
       font-size: 11px;
-      color: #818cf8;
+      color: #8da5ac;
       text-align: center;
       line-height: 1.5;
     }
@@ -70,36 +77,40 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      background: #fff;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #dce8eb;
     }
 
     .avatar {
       width: 32px;
       height: 32px;
       border-radius: 50%;
-      background: #312e81;
+      background: #eef4f5;
       object-fit: cover;
     }
 
     .user-info { flex: 1; min-width: 0; }
-    .user-name { font-size: 13px; font-weight: 500; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .user-email { font-size: 11px; color: #a5b4fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-name { font-size: 13px; font-weight: 600; color: #105465; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-email { font-size: 11px; color: #5f7a82; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     .btn-signout {
       width: 100%;
       padding: 9px;
-      background: transparent;
-      color: #a5b4fc;
-      border: 1px solid #3730a3;
-      border-radius: 7px;
+      background: #fff;
+      color: #5f7a82;
+      border: 1px solid #dce8eb;
+      border-radius: 8px;
       font-size: 12px;
       cursor: pointer;
       transition: all 0.15s;
     }
-    .btn-signout:hover { background: #312e81; color: #e0e7ff; }
+    .btn-signout:hover { border-color: #c1d3d7; color: #3d5a63; background: #eef4f5; }
 
     .divider {
       border: none;
-      border-top: 1px solid #3730a3;
+      border-top: 1px solid #dce8eb;
     }
 
     .status {
@@ -112,6 +123,23 @@
 </head>
 <body>
   <div class="header">
+    <svg class="header-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 167.42 196.24">
+      <polygon fill="#0f7588" points="122.16 19.29 122.16 19.32 122.18 19.3 122.16 19.29"/>
+      <polygon fill="#108292" points="167.04 146.75 167.04 146.85 84.11 97.97 83.66 98.23 83.69 98.25 83.69 196.24 167.31 146.91 167.04 146.75"/>
+      <polygon fill="#105465" points="83.66 98.23 83.42 98.09 41.17 122.63 .01 146.91 83.64 196.24 83.64 98.25 83.66 98.23"/>
+      <polygon fill="#0f7588" points="83.69 97.5 83.69 97.43 83.64 97.46 83.64 97.47 83.69 97.5"/>
+      <polygon fill="#0f7588" points="83.99 97.76 83.87 97.83 84.11 97.97 84.23 97.9 83.99 97.76"/>
+      <polygon fill="#0f7588" points=".21 49.16 0 146.91 84.13 97.73 .21 49.16"/>
+      <polygon fill="#14a8b4" points="167.21 49.16 167.42 146.91 83.29 97.73 167.21 49.16"/>
+      <polygon fill="#0f7588" points="83.87 97.83 83.54 97.64 83.09 97.9 83.42 98.09 83.87 97.83"/>
+      <polygon fill="#0f7588" points="83.66 97.56 83.64 97.55 83.64 97.47 83.63 97.46 83.43 97.58 83.54 97.64 83.66 97.56"/>
+      <polygon fill="#0f7588" points="83.66 97.56 83.99 97.76 84.06 97.72 83.69 97.5 83.69 97.55 83.66 97.56"/>
+      <polygon fill="#fff" points="83.71 128.53 108.87 113.8 108.87 143.27 134.54 128.62 134.54 67.86 83.71 97.67 83.69 97.67 32.86 67.86 32.86 128.62 58.54 143.27 58.54 113.8 83.69 128.53 83.71 128.53"/>
+      <polygon fill="#54b7c5" points="167.31 49.33 83.69 0 83.69 97.87 167.31 49.33"/>
+      <polygon fill="#199eae" points="83.63 97.91 83.64 97.9 83.64 0 .01 49.33 83.63 97.91"/>
+      <polygon fill="#fff" points="83.9 69.15 83.9 69.15 83.9 31.85 52.05 50.65 83.9 69.15"/>
+      <polygon fill="#fff" opacity=".5" points="84.51 69.15 84.5 69.15 84.5 31.85 116.36 50.65 84.51 69.15"/>
+    </svg>
     <div>
       <h1>Memento</h1>
       <div class="sub" id="header-sub">Sign in to start capturing</div>
