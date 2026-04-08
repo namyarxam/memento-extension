@@ -21,9 +21,13 @@ esbuild.buildSync({
 // Copy static files to dist
 fs.copyFileSync('popup.html', path.join('dist', 'popup.html'));
 
-// Copy manifest without the "key" field (Chrome Web Store rejects it)
+// Copy manifest — strip "key" field only for Chrome Web Store builds (CWS rejects it).
+// Without the key, the extension ID changes and OAuth redirect URLs break.
+// Usage: STRIP_KEY=1 node build.js   (for CWS upload only)
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
-delete manifest.key;
+if (process.env.STRIP_KEY) {
+  delete manifest.key;
+}
 fs.writeFileSync(path.join('dist', 'manifest.json'), JSON.stringify(manifest, null, 2));
 
 // Copy icons
