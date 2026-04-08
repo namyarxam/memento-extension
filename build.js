@@ -19,9 +19,12 @@ esbuild.buildSync({
 });
 
 // Copy static files to dist
-['manifest.json', 'popup.html'].forEach(f =>
-  fs.copyFileSync(f, path.join('dist', f))
-);
+fs.copyFileSync('popup.html', path.join('dist', 'popup.html'));
+
+// Copy manifest without the "key" field (Chrome Web Store rejects it)
+const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+delete manifest.key;
+fs.writeFileSync(path.join('dist', 'manifest.json'), JSON.stringify(manifest, null, 2));
 
 // Copy icons
 const iconsDir = 'icons';
