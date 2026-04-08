@@ -188,18 +188,21 @@
     <polygon fill="#fff" opacity=".5" points="84.51 69.15 84.5 69.15 84.5 31.85 116.36 50.65 84.51 69.15"/>
   </svg>`;
 
+  // Clip-path matching the logo's cube/hexagon silhouette (pointy-top, derived from SVG outer vertices)
+  const HEX_CLIP = 'polygon(50% 0%, 100% 25.1%, 100% 74.9%, 50% 100%, 0% 74.9%, 0% 25.1%)';
+
   const btn = document.createElement('button');
   btn.id = 'cb-btn';
-  btn.innerHTML = `<div id="cb-btn-photo"></div><div id="cb-btn-strip"></div>`;
+  btn.innerHTML = `<div id="cb-btn-photo"></div>`;
   Object.assign(btn.style, {
     position: 'fixed', top: '50%', right: '72px', transform: 'translateY(-50%)',
-    width: '36px', height: '42px', borderRadius: '6px',
+    width: '36px', height: '42px',
     background: 'transparent',
     border: 'none',
     cursor: 'pointer', zIndex: '2147483647',
     boxShadow: 'none',
     transition: 'transform 0.18s ease, filter 0.18s ease',
-    display: 'flex', flexDirection: 'column', alignItems: 'stretch',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     outline: 'none', padding: '0',
     overflow: 'visible',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -208,7 +211,7 @@
 
   const btnPhoto = btn.querySelector('#cb-btn-photo');
   Object.assign(btnPhoto.style, {
-    flex: '1',
+    width: '100%', height: '100%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -216,16 +219,6 @@
     fontSize: '14px',
     fontWeight: '700',
     letterSpacing: '-0.02em',
-    transition: 'background 0.18s ease',
-  });
-
-  const btnStrip = btn.querySelector('#cb-btn-strip');
-  Object.assign(btnStrip.style, {
-    height: '0px',
-    background: 'transparent',
-    borderTop: 'none',
-    flexShrink: '0',
-    transition: 'background 0.18s ease',
   });
 
   document.body.appendChild(btn);
@@ -239,10 +232,11 @@
     btn.style.filter = 'drop-shadow(0 3px 10px rgba(0,0,0,0.3))';
   });
 
+
   // ── Toast ────────────────────────────────────────────────────────────────
   const toast = document.createElement('div');
   Object.assign(toast.style, {
-    position: 'fixed', top: 'calc(50% - 48px)', right: '36px',
+    position: 'fixed', top: 'calc(50% + 32px)', right: '36px',
     background: '#292524', color: '#e7e5e4', padding: '9px 14px',
     borderRadius: '8px', fontSize: '13px', lineHeight: '1.4',
     zIndex: '2147483647', opacity: '0', transition: 'opacity 0.25s ease',
@@ -279,10 +273,10 @@
 
   // ── Button rendering ─────────────────────────────────────────────────────
   function setIdle() {
+    btnPhoto.style.background = 'transparent';
     btnPhoto.innerHTML = LOGO_SVG;
-    btnPhoto.style.background = '';
-    btnStrip.style.background = 'transparent';
-    btn.title = 'Memento — save a moment';
+    btn.style.clipPath = 'none';
+    btn.title = '';
     btn.style.pointerEvents = 'auto';
     btn.style.transform = 'translateY(-50%) scale(1)';
   }
@@ -292,24 +286,20 @@
     if (count > 0) {
       btnPhoto.innerHTML = `<span style="color:#fff;font-size:13px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,0.4)">${count}</span>`;
       btnPhoto.style.background = 'rgba(20,168,180,0.85)';
-      btnPhoto.style.borderRadius = '6px';
-      btnStrip.style.background = 'transparent';
     } else {
       btnPhoto.innerHTML = ICON_CROSSHAIR;
-      btnPhoto.style.background = '';
-      btnPhoto.style.borderRadius = '';
-      btnStrip.style.background = 'transparent';
+      btnPhoto.style.background = 'rgba(20,168,180,0.85)';
     }
-    btn.title = count > 0 ? `Save ${count} moment${count > 1 ? 's' : ''}` : 'Click text to select';
+    btn.style.clipPath = HEX_CLIP;
+    btn.title = '';
     btn.style.pointerEvents = 'auto';
     btn.style.transform = 'translateY(-50%) scale(1)';
   }
 
   function setSaving() {
     btnPhoto.innerHTML = ICON_DOTS;
-    btnPhoto.style.background = '';
-    btnPhoto.style.borderRadius = '';
-    btnStrip.style.background = 'transparent';
+    btnPhoto.style.background = 'rgba(20,168,180,0.85)';
+    btn.style.clipPath = HEX_CLIP;
     btn.style.pointerEvents = 'none';
     btn.style.transform = 'translateY(-50%) scale(1)';
   }
@@ -335,7 +325,6 @@
     document.body.classList.add('cb-selecting');
     modeRing.classList.add('cb-visible');
     setSelecting();
-    showToast('Click to select blocks. Hold + drag for a range.', 4000);
   }
 
   function exitSelecting() {
@@ -348,7 +337,6 @@
     mouseIsDown = false;
     isDragging = false;
     setIdle();
-    toast.style.opacity = '0';
   }
 
   // ── Hover (fixed overlay — immune to platform CSS) ────────────────────────
@@ -515,6 +503,22 @@
   // ── Button click ──────────────────────────────────────────────────────────
   btn.addEventListener('click', async () => {
     if (mode === 'idle') {
+      // Check auth before entering selection mode
+      try {
+        const session = await new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage({ action: 'getSession' }, res => {
+            if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+            else resolve(res);
+          });
+        });
+        if (!session) {
+          showToast('Sign in via the extension popup first.');
+          chrome.runtime.sendMessage({ action: 'openPopup' });
+          return;
+        }
+      } catch {
+        return;
+      }
       enterSelecting();
       return;
     }
@@ -525,7 +529,7 @@
         return;
       }
 
-      // Each moment becomes one block — drag selections merge into a single entry
+      // Each moment becomes one block
       const blocks = moments
         .map(m => {
           const text = m.elements
@@ -540,11 +544,9 @@
       const text = blocks.map(b => b.text).join('\n\n');
       const source_text = text.slice(0, 80);
       const url = window.location.href;
-      const savedCount = moments.length;
 
       exitSelecting();
       setSaving();
-      showToast('Saving…');
 
       const saveTimeout = setTimeout(() => {
         setIdle();
@@ -561,11 +563,9 @@
           }
           if (response?.success) {
             spawnEject();
-            showToast(`Saved ${savedCount > 1 ? savedCount + ' moments' : '1 moment'}.`);
-          } else if (response?.reason === 'not_authenticated') {
-            showToast('Sign in via the extension popup first.');
+            showToast('Saved.');
           } else {
-            showToast('Save failed: ' + (response?.reason || 'unknown'));
+            showToast('Save failed. Please try again.');
           }
         });
       };
@@ -575,7 +575,7 @@
           if (chrome.runtime.lastError) { /* worker was asleep, now awake */ }
           setTimeout(doSave, 100);
         });
-      } catch (e) {
+      } catch {
         clearTimeout(saveTimeout);
         setIdle();
         showToast('Could not reach extension. Reload the page.');

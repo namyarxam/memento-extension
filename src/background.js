@@ -1,7 +1,5 @@
-// TODO: Replace with your Supabase project values
-const SUPABASE_URL = "https://qzuqjnawcwvrhfafeypu.supabase.co";
-const SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6dXFqbmF3Y3d2cmhmYWZleXB1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MTI0MTIsImV4cCI6MjA5MTA4ODQxMn0.Kl8AoKNXW_ovcUOsS3441rYUKSc9dZHogYDrjTuOfKE";
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
 // Re-inject content script on SPA navigation (e.g. claude.ai navigating to /chat/*)
 const CONTENT_PATTERNS = [
@@ -38,6 +36,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     getSession().then(sendResponse);
     return true;
   }
+  if (msg.action === "openPopup") {
+    chrome.action.openPopup().catch(() => {});
+    return false;
+  }
   if (msg.action === "ping") {
     sendResponse({ pong: true });
     return true;
@@ -45,7 +47,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 async function getSession() {
-  const { session } = await chrome.storage.sync.get(["session"]);
+  const { session } = await chrome.storage.local.get(["session"]);
   return session || null;
 }
 
@@ -81,7 +83,7 @@ async function signIn() {
     const user = await userRes.json();
 
     const session = { accessToken, refreshToken, user };
-    await chrome.storage.sync.set({ session });
+    await chrome.storage.local.set({ session });
     return { success: true, session };
   } catch (e) {
     return { success: false, reason: e.message };
@@ -89,7 +91,7 @@ async function signIn() {
 }
 
 async function signOut() {
-  await chrome.storage.sync.remove(["session"]);
+  await chrome.storage.local.remove(["session"]);
   return { success: true };
 }
 
@@ -110,10 +112,19 @@ async function refreshSession(session) {
       refreshToken: data.refresh_token,
       user: data.user,
     };
-    await chrome.storage.sync.set({ session: newSession });
+    await chrome.storage.local.set({ session: newSession });
     return newSession;
   } catch {
     return null;
+  }
+}
+
+function isTokenExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000 < Date.now() - 60000; // 60s buffer
+  } catch {
+    return true;
   }
 }
 
@@ -121,6 +132,13 @@ async function saveBrick({ text, url, blocks, source_text }) {
   try {
     let session = await getSession();
     if (!session) return { success: false, reason: "not_authenticated" };
+
+    // Proactively refresh if token is expired or about to expire
+    if (isTokenExpired(session.accessToken)) {
+      const refreshed = await refreshSession(session);
+      if (!refreshed) return { success: false, reason: "not_authenticated" };
+      session = refreshed;
+    }
 
     const attempt = async (s) => fetch(`${SUPABASE_URL}/rest/v1/captures`, {
       method: "POST",
@@ -150,7 +168,8 @@ async function saveBrick({ text, url, blocks, source_text }) {
     if (res.ok) return { success: true };
 
     const err = await res.json();
-    return { success: false, reason: JSON.stringify(err) };
+    console.error('saveBrick error:', err);
+    return { success: false, reason: 'Failed to save capture. Please try again.' };
   } catch (e) {
     return { success: false, reason: e.message };
   }

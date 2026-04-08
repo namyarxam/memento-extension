@@ -1,0 +1,7 @@
+.env
+.env.local
+dist/
+*.pem
+.DS_Store
+node_modules/
+RELEASE-PLAN.local.md

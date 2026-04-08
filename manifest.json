@@ -9,7 +9,7 @@
     "https://claude.ai/*",
     "https://gemini.google.com/*",
     "https://chatgpt.com/*",
-    "https://YOUR_PROJECT.supabase.co/*"
+    "https://qzuqjnawcwvrhfafeypu.supabase.co/*"
   ],
   "content_scripts": [
     {
@@ -30,6 +30,9 @@
     "32": "icon-32.png",
     "48": "icon-48.png",
     "128": "icon-128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
   },
   "action": {
     "default_popup": "popup.html",
