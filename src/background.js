@@ -48,7 +48,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 async function getSession() {
   const { session } = await chrome.storage.local.get(["session"]);
-  return session || null;
+  if (!session) return null;
+
+  // If the token is still valid, return as-is
+  if (!isTokenExpired(session.accessToken)) return session;
+
+  // Token expired — try to refresh transparently
+  const refreshed = await refreshSession(session);
+  if (refreshed) return refreshed;
+
+  // Refresh failed — clear stale session so UI doesn't show signed-in state
+  await chrome.storage.local.remove(["session"]);
+  return null;
 }
 
 async function signIn() {

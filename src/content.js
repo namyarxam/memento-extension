@@ -517,6 +517,7 @@
           return;
         }
       } catch {
+        showToast('Could not reach extension. Reload the page.');
         return;
       }
       enterSelecting();
@@ -564,8 +565,11 @@
           if (response?.success) {
             spawnEject();
             showToast('Saved.');
+          } else if (response?.reason === 'not_authenticated') {
+            showToast('Session expired. Sign in again.');
+            chrome.runtime.sendMessage({ action: 'openPopup' });
           } else {
-            showToast('Save failed. Please try again.');
+            showToast(response?.reason || 'Save failed. Please try again.');
           }
         });
       };
