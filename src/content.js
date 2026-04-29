@@ -17,7 +17,12 @@
       background: rgba(120, 113, 108, 0.04) !important;
     }
     .cb-selecting, .cb-selecting * { cursor: crosshair !important; user-select: none !important; -webkit-user-select: none !important; }
-    #cb-btn, #cb-btn * { cursor: pointer !important; }
+    #cb-btn, #cb-btn *,
+    #cb-header-btn, #cb-header-btn * { cursor: pointer !important; }
+    #cb-header-btn:not(:disabled):hover { filter: brightness(1.08); }
+    #cb-header-btn[data-state="selecting-empty"]:hover { background: rgba(20,168,180,0.28) !important; }
+    #cb-header-btn[data-state="selecting-count"]:hover { background: #0d8b95 !important; }
+    #cb-header-btn[data-state="saving"] { cursor: default !important; opacity: 0.85; }
     #cb-mode-ring {
       position: fixed;
       inset: 0;
@@ -112,7 +117,7 @@
 
   document.addEventListener('mousedown', e => {
     if (mode !== 'selecting') return;
-    if (e.target.closest('#cb-btn')) return;
+    if (e.target.closest('#cb-btn') || e.target.closest('#cb-header-btn')) return;
     if (e.button !== 0) return;
     dragStartX = e.clientX;
     dragStartY = e.clientY;
@@ -156,7 +161,7 @@
     }
 
     // Not a drag — treat as click toggle
-    if (e.target.closest('#cb-btn')) return;
+    if (e.target.closest('#cb-btn') || e.target.closest('#cb-header-btn')) return;
     const el = findBestElement(e.clientX, e.clientY);
     if (!el) return;
     clearHover();
@@ -285,6 +290,47 @@
   // ── Button rendering ─────────────────────────────────────────────────────
   let hasHeaderButton = false;
 
+  function updateHeaderButton(state, count) {
+    const headerEl = document.getElementById('cb-header-btn');
+    if (!headerEl) return;
+    const iconEl = headerEl.querySelector('.cb-icon');
+    const labelEl = headerEl.querySelector('.cb-label');
+    if (!iconEl) return;
+
+    if (state === 'idle') {
+      iconEl.innerHTML = headerEl.dataset.iconOnly === 'true'
+        ? buildHeaderLogo(20, 22)
+        : (headerEl.dataset.platform === 'chatgpt.com' ? buildHeaderLogo(16, 18) : buildHeaderLogo(14, 16));
+      if (labelEl) labelEl.textContent = 'Capture';
+      headerEl.style.background = '';
+      headerEl.style.color = '';
+      headerEl.disabled = false;
+      headerEl.dataset.state = 'idle';
+    } else if (state === 'selecting') {
+      if (count > 0) {
+        iconEl.innerHTML = `<span style="color:#fff;font-weight:700;font-size:12px;line-height:1">${count}</span>`;
+        if (labelEl) labelEl.textContent = 'Save';
+        headerEl.style.background = '#14a8b4';
+        headerEl.style.color = '#fff';
+        headerEl.dataset.state = 'selecting-count';
+      } else {
+        iconEl.innerHTML = ICON_CROSSHAIR;
+        if (labelEl) labelEl.textContent = 'Cancel';
+        headerEl.style.background = 'rgba(20,168,180,0.18)';
+        headerEl.style.color = '';
+        headerEl.dataset.state = 'selecting-empty';
+      }
+      headerEl.disabled = false;
+    } else if (state === 'saving') {
+      iconEl.innerHTML = ICON_DOTS;
+      if (labelEl) labelEl.textContent = 'Saving';
+      headerEl.style.background = '#14a8b4';
+      headerEl.style.color = '#fff';
+      headerEl.disabled = true;
+      headerEl.dataset.state = 'saving';
+    }
+  }
+
   function setIdle() {
     btnPhoto.style.background = 'transparent';
     btnPhoto.innerHTML = LOGO_SVG;
@@ -292,8 +338,8 @@
     btn.title = '';
     btn.style.pointerEvents = 'auto';
     btn.style.transform = 'translateY(-50%) scale(1)';
-    // Hide floating button when header button is the entry point
     btn.style.display = hasHeaderButton ? 'none' : 'flex';
+    updateHeaderButton('idle');
   }
 
   function setSelecting() {
@@ -309,7 +355,8 @@
     btn.title = '';
     btn.style.pointerEvents = 'auto';
     btn.style.transform = 'translateY(-50%) scale(1)';
-    btn.style.display = 'flex';
+    btn.style.display = hasHeaderButton ? 'none' : 'flex';
+    updateHeaderButton('selecting', count);
   }
 
   function setSaving() {
@@ -318,7 +365,8 @@
     btn.style.clipPath = HEX_CLIP;
     btn.style.pointerEvents = 'none';
     btn.style.transform = 'translateY(-50%) scale(1)';
-    btn.style.display = 'flex';
+    btn.style.display = hasHeaderButton ? 'none' : 'flex';
+    updateHeaderButton('saving');
   }
 
   // ── Eject animation ───────────────────────────────────────────────────────
@@ -456,7 +504,7 @@
   // Suppress native click in selecting mode to prevent links/buttons from firing
   document.addEventListener('click', e => {
     if (mode !== 'selecting') return;
-    if (e.target.closest('#cb-btn')) return;
+    if (e.target.closest('#cb-btn') || e.target.closest('#cb-header-btn')) return;
     e.preventDefault();
     e.stopPropagation();
   }, true);
@@ -670,11 +718,12 @@
         const b = document.createElement('button');
         b.type = 'button';
         b.id = HEADER_BTN_ID;
+        b.dataset.platform = 'claude.ai';
         b.className = 'inline-flex items-center justify-center relative isolate shrink-0 select-none border-0.5 overflow-hidden transition duration-100 h-8 rounded-md px-3 min-w-[4rem] whitespace-nowrap !text-xs';
         b.style.cssText = 'cursor:pointer;background:transparent;color:inherit;font:inherit;gap:6px';
         b.title = 'Capture moment';
         b.setAttribute('aria-label', 'Capture moment with Memento');
-        b.innerHTML = `<span style="display:inline-flex;align-items:center;justify-content:center">${buildHeaderLogo(14, 16)}</span><span>Capture</span>`;
+        b.innerHTML = `<span class="cb-icon" style="display:inline-flex;align-items:center;justify-content:center;min-width:14px">${buildHeaderLogo(14, 16)}</span><span class="cb-label">Capture</span>`;
         return b;
       },
       inject: (btnEl, shareEl) => shareEl.parentElement.insertBefore(btnEl, shareEl),
@@ -686,10 +735,11 @@
         const b = document.createElement('button');
         b.type = 'button';
         b.id = HEADER_BTN_ID;
+        b.dataset.platform = 'chatgpt.com';
         b.className = 'btn relative btn-ghost text-token-text-primary hover:bg-token-surface-hover rounded-lg max-sm:hidden';
         b.title = 'Capture moment';
         b.setAttribute('aria-label', 'Capture moment with Memento');
-        b.innerHTML = `<div class="flex w-full items-center justify-center gap-1.5"><span style="display:inline-flex;align-items:center;justify-content:center">${buildHeaderLogo(16, 18)}</span>Capture</div>`;
+        b.innerHTML = `<div class="flex w-full items-center justify-center gap-1.5"><span class="cb-icon" style="display:inline-flex;align-items:center;justify-content:center;min-width:16px">${buildHeaderLogo(16, 18)}</span><span class="cb-label">Capture</span></div>`;
         return b;
       },
       inject: (btnEl, shareEl) => shareEl.parentElement.insertBefore(btnEl, shareEl),
@@ -701,12 +751,14 @@
         const b = document.createElement('button');
         b.type = 'button';
         b.id = HEADER_BTN_ID;
+        b.dataset.platform = 'gemini.google.com';
+        b.dataset.iconOnly = 'true';
         b.style.cssText = 'width:40px;height:40px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;cursor:pointer;padding:0;color:inherit';
         b.title = 'Capture moment';
         b.setAttribute('aria-label', 'Capture moment with Memento');
-        b.innerHTML = `<span style="display:inline-flex;align-items:center;justify-content:center">${buildHeaderLogo(20, 22)}</span>`;
-        b.addEventListener('mouseenter', () => { b.style.background = 'rgba(127,127,127,0.12)'; });
-        b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; });
+        b.innerHTML = `<span class="cb-icon" style="display:inline-flex;align-items:center;justify-content:center">${buildHeaderLogo(20, 22)}</span>`;
+        b.addEventListener('mouseenter', () => { if (mode === 'idle') b.style.background = 'rgba(127,127,127,0.12)'; });
+        b.addEventListener('mouseleave', () => { if (mode === 'idle') b.style.background = 'transparent'; });
         return b;
       },
       inject: (btnEl, shareEl) => {
@@ -736,8 +788,12 @@
     platform.inject(btnEl, shareEl);
     if (!hasHeaderButton) {
       hasHeaderButton = true;
-      if (mode === 'idle') btn.style.display = 'none';
     }
+    btn.style.display = 'none';
+    // Reflect current mode in the freshly injected button
+    if (mode === 'selecting') updateHeaderButton('selecting', moments.length);
+    else if (mode === 'saving') updateHeaderButton('saving');
+    else updateHeaderButton('idle');
     return true;
   }
 
