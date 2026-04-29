@@ -529,7 +529,7 @@
           });
         });
         if (!session) {
-          showToast('Sign in via the extension popup first.');
+          // Popup itself shows the sign-in prompt — no toast needed
           chrome.runtime.sendMessage({ action: 'openPopup' });
           return;
         }
@@ -583,7 +583,7 @@
             spawnEject();
             showToast('Saved.');
           } else if (response?.reason === 'not_authenticated') {
-            showToast('Session expired. Sign in again.');
+            // Popup carries the sign-in prompt — skip toast to avoid overlap
             chrome.runtime.sendMessage({ action: 'openPopup' });
           } else {
             showToast(response?.reason || 'Save failed. Please try again.');
