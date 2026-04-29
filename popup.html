@@ -108,6 +108,25 @@
     }
     .btn-signout:hover { border-color: #c1d3d7; color: #3d5a63; background: #eef4f5; }
 
+    .btn-dashboard {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 10px;
+      background: #105465;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-dashboard:hover { background: #0d4655; }
+    .btn-dashboard svg { opacity: 0.85; }
+
     .divider {
       border: none;
       border-top: 1px solid #dce8eb;
@@ -163,6 +182,10 @@
         <div class="user-email" id="user-email"></div>
       </div>
     </div>
+    <button class="btn-dashboard" id="btn-dashboard">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>
+      View my mementos
+    </button>
     <hr class="divider">
     <button class="btn-signout" id="btn-signout">Sign out</button>
   </div>

@@ -247,10 +247,21 @@
   });
   document.body.appendChild(toast);
 
+  function positionToastNearAnchor() {
+    const headerEl = document.getElementById('cb-header-btn');
+    const anchor = (headerEl && headerEl.offsetParent) ? headerEl : btn;
+    if (!anchor || !anchor.offsetParent) return;
+    const rect = anchor.getBoundingClientRect();
+    toast.style.top = (rect.bottom + 8) + 'px';
+    toast.style.left = 'auto';
+    toast.style.right = Math.max(8, window.innerWidth - rect.right) + 'px';
+  }
+
   let toastTimer;
   function showToast(msg, duration = 3000) {
     clearTimeout(toastTimer);
     toast.textContent = msg;
+    positionToastNearAnchor();
     toast.style.opacity = '1';
     toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, duration);
   }
@@ -272,6 +283,8 @@
   </svg>`;
 
   // ── Button rendering ─────────────────────────────────────────────────────
+  let hasHeaderButton = false;
+
   function setIdle() {
     btnPhoto.style.background = 'transparent';
     btnPhoto.innerHTML = LOGO_SVG;
@@ -279,6 +292,8 @@
     btn.title = '';
     btn.style.pointerEvents = 'auto';
     btn.style.transform = 'translateY(-50%) scale(1)';
+    // Hide floating button when header button is the entry point
+    btn.style.display = hasHeaderButton ? 'none' : 'flex';
   }
 
   function setSelecting() {
@@ -294,6 +309,7 @@
     btn.title = '';
     btn.style.pointerEvents = 'auto';
     btn.style.transform = 'translateY(-50%) scale(1)';
+    btn.style.display = 'flex';
   }
 
   function setSaving() {
@@ -302,6 +318,7 @@
     btn.style.clipPath = HEX_CLIP;
     btn.style.pointerEvents = 'none';
     btn.style.transform = 'translateY(-50%) scale(1)';
+    btn.style.display = 'flex';
   }
 
   // ── Eject animation ───────────────────────────────────────────────────────
@@ -501,7 +518,7 @@
   }
 
   // ── Button click ──────────────────────────────────────────────────────────
-  btn.addEventListener('click', async () => {
+  async function handleCaptureClick() {
     if (mode === 'idle') {
       // Check auth before entering selection mode
       try {
@@ -585,7 +602,9 @@
         showToast('Could not reach extension. Reload the page.');
       }
     }
-  });
+  }
+
+  btn.addEventListener('click', handleCaptureClick);
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && mode === 'selecting') exitSelecting();
@@ -633,6 +652,115 @@
     }
     return bestDiv;
   }
+
+  // ── Header button injection (sit next to native Share button) ────────────
+  const HEADER_BTN_ID = 'cb-header-btn';
+
+  function buildHeaderLogo(width, height) {
+    return LOGO_SVG
+      .replace(/width="\d+"/, `width="${width}"`)
+      .replace(/height="\d+"/, `height="${height}"`);
+  }
+
+  const HEADER_PLATFORMS = [
+    {
+      host: 'claude.ai',
+      shareSelector: '[data-testid="wiggle-controls-actions-share"]',
+      build: () => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.id = HEADER_BTN_ID;
+        b.className = 'inline-flex items-center justify-center relative isolate shrink-0 select-none border-0.5 overflow-hidden transition duration-100 h-8 rounded-md px-3 min-w-[4rem] whitespace-nowrap !text-xs';
+        b.style.cssText = 'cursor:pointer;background:transparent;color:inherit;font:inherit;gap:6px';
+        b.title = 'Capture moment';
+        b.setAttribute('aria-label', 'Capture moment with Memento');
+        b.innerHTML = `<span style="display:inline-flex;align-items:center;justify-content:center">${buildHeaderLogo(14, 16)}</span><span>Capture</span>`;
+        return b;
+      },
+      inject: (btnEl, shareEl) => shareEl.parentElement.insertBefore(btnEl, shareEl),
+    },
+    {
+      host: 'chatgpt.com',
+      shareSelector: '[data-testid="share-chat-button"]',
+      build: () => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.id = HEADER_BTN_ID;
+        b.className = 'btn relative btn-ghost text-token-text-primary hover:bg-token-surface-hover rounded-lg max-sm:hidden';
+        b.title = 'Capture moment';
+        b.setAttribute('aria-label', 'Capture moment with Memento');
+        b.innerHTML = `<div class="flex w-full items-center justify-center gap-1.5"><span style="display:inline-flex;align-items:center;justify-content:center">${buildHeaderLogo(16, 18)}</span>Capture</div>`;
+        return b;
+      },
+      inject: (btnEl, shareEl) => shareEl.parentElement.insertBefore(btnEl, shareEl),
+    },
+    {
+      host: 'gemini.google.com',
+      shareSelector: '[data-test-id="share-button"]',
+      build: () => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.id = HEADER_BTN_ID;
+        b.style.cssText = 'width:40px;height:40px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;cursor:pointer;padding:0;color:inherit';
+        b.title = 'Capture moment';
+        b.setAttribute('aria-label', 'Capture moment with Memento');
+        b.innerHTML = `<span style="display:inline-flex;align-items:center;justify-content:center">${buildHeaderLogo(20, 22)}</span>`;
+        b.addEventListener('mouseenter', () => { b.style.background = 'rgba(127,127,127,0.12)'; });
+        b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; });
+        return b;
+      },
+      inject: (btnEl, shareEl) => {
+        const wrapper = shareEl.closest('.buttons-container.share') || shareEl.parentElement;
+        wrapper.parentElement.insertBefore(btnEl, wrapper);
+      },
+    },
+  ];
+
+  function getActivePlatform() {
+    const host = location.hostname;
+    return HEADER_PLATFORMS.find(p => host.includes(p.host)) || null;
+  }
+
+  function tryInjectHeaderButton() {
+    if (document.getElementById(HEADER_BTN_ID)) return true;
+    const platform = getActivePlatform();
+    if (!platform) return false;
+    const shareEl = document.querySelector(platform.shareSelector);
+    if (!shareEl) return false;
+    const btnEl = platform.build();
+    btnEl.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleCaptureClick();
+    });
+    platform.inject(btnEl, shareEl);
+    if (!hasHeaderButton) {
+      hasHeaderButton = true;
+      if (mode === 'idle') btn.style.display = 'none';
+    }
+    return true;
+  }
+
+  function setupHeaderInjection() {
+    if (!getActivePlatform()) return;
+    tryInjectHeaderButton();
+    const observer = new MutationObserver(() => {
+      // Re-inject if our button got removed (SPA navigation, header re-render)
+      if (!document.getElementById(HEADER_BTN_ID)) {
+        tryInjectHeaderButton();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    // After 4s, if still no header button, give up so floating button takes over
+    setTimeout(() => {
+      if (!document.getElementById(HEADER_BTN_ID)) {
+        hasHeaderButton = false;
+        if (mode === 'idle') btn.style.display = 'flex';
+      }
+    }, 4000);
+  }
+
+  setupHeaderInjection();
 
   // ── Jump to source ────────────────────────────────────────────────────────
   const initHash = window.location.hash;

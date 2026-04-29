@@ -57,4 +57,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     await chrome.runtime.sendMessage({ action: 'signOut' });
     showSignedOut();
   });
+
+  document.getElementById('btn-dashboard').addEventListener('click', () => {
+    chrome.tabs.create({ url: 'https://memento-web-jet.vercel.app/' });
+  });
 });

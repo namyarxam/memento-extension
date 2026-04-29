@@ -49,17 +49,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 async function getSession() {
   const { session } = await chrome.storage.local.get(["session"]);
   if (!session) return null;
-
-  // If the token is still valid, return as-is
   if (!isTokenExpired(session.accessToken)) return session;
-
-  // Token expired — try to refresh transparently
-  const refreshed = await refreshSession(session);
-  if (refreshed) return refreshed;
-
-  // Refresh failed — clear stale session so UI doesn't show signed-in state
-  await chrome.storage.local.remove(["session"]);
-  return null;
+  // refreshSession clears storage itself on auth failure, returns original on transient errors
+  return await refreshSession(session);
 }
 
 async function signIn() {
@@ -106,28 +98,44 @@ async function signOut() {
   return { success: true };
 }
 
+// Single-flight: dedupe concurrent refreshes so only one network call happens.
+// Supabase rotates refresh tokens — parallel calls would invalidate each other.
+let refreshInFlight = null;
+
 async function refreshSession(session) {
-  try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({ refresh_token: session.refreshToken }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const newSession = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      user: data.user,
-    };
-    await chrome.storage.local.set({ session: newSession });
-    return newSession;
-  } catch {
-    return null;
-  }
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+        body: JSON.stringify({ refresh_token: session.refreshToken }),
+      });
+      if (res.status === 400 || res.status === 401) {
+        // Refresh token rejected — definitive auth failure, clear stored session
+        await chrome.storage.local.remove(["session"]);
+        return null;
+      }
+      if (!res.ok) {
+        // Transient (5xx, etc.) — keep current session, let caller retry later
+        return session;
+      }
+      const data = await res.json();
+      const newSession = {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        user: data.user,
+      };
+      await chrome.storage.local.set({ session: newSession });
+      return newSession;
+    } catch {
+      // Network error — keep current session
+      return session;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
 }
 
 function isTokenExpired(token) {
@@ -173,7 +181,14 @@ async function saveBrick({ text, url, blocks, source_text }) {
     if (res.status === 401) {
       const refreshed = await refreshSession(session);
       if (!refreshed) return { success: false, reason: "not_authenticated" };
+      // If refresh returned the same session, it was a transient failure — don't loop
+      if (refreshed === session) return { success: false, reason: "Network issue. Try again." };
       res = await attempt(refreshed);
+      // Retry still failed with auth — clear session so UI is truthful
+      if (res.status === 401) {
+        await chrome.storage.local.remove(["session"]);
+        return { success: false, reason: "not_authenticated" };
+      }
     }
 
     if (res.ok) return { success: true };
